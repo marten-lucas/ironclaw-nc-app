@@ -1,0 +1,19 @@
+{
+  "name": "kiga/ironclaw-talk-bridge",
+  "description": "Nextcloud app: bot-free Talk inbound trigger bridge for Ironclaw",
+  "type": "project",
+  "license": "AGPL-3.0-or-later",
+  "autoload": {
+    "psr-4": {
+      "OCA\\IronclawTalkBridge\\": "lib/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "OCA\\IronclawTalkBridge\\Tests\\": "tests/"
+    }
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  }
+}

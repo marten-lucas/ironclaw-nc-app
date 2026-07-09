@@ -1,0 +1,132 @@
+# Ironclaw Talk Bridge (Nextcloud App)
+
+This app implements a bot-free inbound trigger path from Nextcloud Talk to Ironclaw.
+
+## Technical Recommendation
+
+Best integration point: `OCA\\Talk\\Events\\ChatMessageSentEvent` (official Talk PHP event, since Talk 18).
+
+Why this point is preferred:
+- It is an official server-side event and does not require browser clients.
+- It avoids per-room webhook endpoint registration.
+- It is less coupled than direct DB triggers and less operationally heavy than polling.
+- It supports app-internal processing and queueing before forwarding to Ironclaw.
+
+Alternatives and why not primary:
+- `BotInvokeEvent`: official, but still tied to bot installation lifecycle.
+- DB polling: high coupling, latency, and upgrade fragility.
+- Frontend hook/browser extension: violates non-goals.
+
+## Current Scope (Phase A)
+
+- Inbound only in Nextcloud app:
+  - Listen to `ChatMessageSentEvent`.
+  - Mention-only gating (`@Display Name` exact match).
+  - Ignore self messages of configured fake user.
+  - Build signed event payload and enqueue in durable outbox.
+  - Retry delivery to Ironclaw on transient failures.
+- Outbound remains in Ironclaw via fake-user REST path (unchanged).
+
+Note on room relevance in Phase A:
+- The app enforces room scope through configurable allowlist tokens (or all rooms when empty).
+- Self-loop prevention is enforced by `fake_user_id` check.
+- A stricter "fake user is currently room member" resolver is planned for hardening once a stable Talk API path is finalized.
+
+## App Config (set via Nextcloud app config)
+
+All values are read from Nextcloud app config (`app=ironclaw_talk_bridge`):
+
+- `enabled` (`0|1`)
+- `ironclaw_inbound_url` (required)
+- `ironclaw_shared_secret` (required, secret)
+- `mention_display_name` (required, exact display name without `@`)
+- `fake_user_id` (optional but recommended)
+- `signature_tolerance_seconds` (default `300`)
+- `dispatch_batch_size` (default `50`)
+- `room_allowlist_tokens` (optional CSV; empty means all rooms)
+- `strict_membership_resolver` (`0|1`, default `1`, fail-closed membership check)
+
+The same key fields are available in Nextcloud Admin Settings (Server section):
+- Ironclaw URL (`ironclaw_inbound_url`)
+- Fake user name for exact mention matching (`mention_display_name`)
+- Shared secret for Ironclaw authentication (`ironclaw_shared_secret`)
+- Plus operational fields used by the bridge (`fake_user_id`, room allowlist, batch size, enabled flag)
+- Hardening fields (`signature_tolerance_seconds`, `strict_membership_resolver`)
+
+## Event Contract to Ironclaw
+
+`POST {ironclaw_inbound_url}`
+
+Headers:
+- `Content-Type: application/json`
+- `X-Ironclaw-Signature: <hex-hmac-sha256>`
+- `X-Ironclaw-Timestamp: <unix-seconds>`
+- `X-Ironclaw-Nonce: <random-hex>`
+- `X-Ironclaw-Key-Id: nextcloud-talk-bridge-v1`
+
+Signature base string:
+- `"{timestamp}\\n{nonce}\\n{raw_body}"`
+
+Body shape:
+
+```json
+{
+  "eventId": "nc-talk:<roomToken>:<messageId>",
+  "source": "nextcloud-talk",
+  "roomToken": "abc123",
+  "messageId": 456,
+  "replyTo": 123,
+  "actor": {
+    "type": "users",
+    "id": "alice",
+    "displayName": "Alice"
+  },
+  "mention": {
+    "displayName": "Ironclaw"
+  },
+  "message": {
+    "raw": "@Ironclaw please summarize",
+    "stripped": "please summarize"
+  },
+  "occurredAt": "2026-07-09T10:00:00+00:00"
+}
+```
+
+## Delivery Behavior
+
+- Durable outbox table stores pending payloads.
+- Unique `eventId` enforces dedupe.
+- Listener tries immediate dispatch.
+- Failures are retried with exponential backoff.
+- No event loss on short Ironclaw outages (until max retries policy, configurable in code).
+
+## Commands and Jobs
+
+- OCC command: `ironclaw-talk-bridge:dispatch` (flush due outbox events)
+- OCC command: `ironclaw-talk-bridge:metrics` (structured counters + outbox state)
+- Background job: `RetryQueuedEventsJob` (periodic retry)
+
+## Integration Harness (Mock Ironclaw)
+
+For Phase A.1 contract checks, use the mock inbound verifier:
+
+```bash
+cd ironclaw-nc-app
+IRONCLAW_SHARED_SECRET=dev-secret node tests/integration/mock-ironclaw-server.mjs
+```
+
+It validates:
+- `X-Ironclaw-Timestamp`
+- `X-Ironclaw-Nonce` (replay rejection)
+- `X-Ironclaw-Signature` over `timestamp + "\\n" + nonce + "\\n" + body`
+
+## Validation Checklist (target)
+
+1. Fake user is normal room participant.
+2. No per-room Talk webhook bot needed.
+3. Exact mention triggers Ironclaw.
+4. No mention does not trigger.
+5. Self messages are ignored.
+6. Reply posted in same room by existing Ironclaw outbound path.
+7. Multiple rooms work in parallel.
+8. Restart of app/Ironclaw does not silently drop queued events.
