@@ -108,7 +108,7 @@ class AdminSettings implements ISettings {
 		}
 	}
 
-	public function getSection(): ?string {
+	public function getSection(): string {
 		return 'server';
 	}
 
@@ -116,7 +116,7 @@ class AdminSettings implements ISettings {
 		return 91;
 	}
 
-	public function getName(): ?string {
+	public function getName(): string {
 		return 'Ironclaw Talk Bridge';
 	}
 }
