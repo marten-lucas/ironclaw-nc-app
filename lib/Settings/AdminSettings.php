@@ -79,7 +79,7 @@ class AdminSettings implements ISettings {
 	}
 
 	public function getSection(): ?string {
-		return Application::APP_ID . '-admin';
+		return 'ironclaw-talk-bridge';
 	}
 
 	public function getPriority(): int {
