@@ -8,6 +8,8 @@
 
 $values = $_['values'];
 $users = $_['users'] ?? [];
+$uiStatus = $_['uiStatus'] ?? '';
+$uiMessage = $_['uiMessage'] ?? '';
 $actionUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridge/settings/admin/save');
 $testUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridge/settings/admin/test-connection');
 ?>
@@ -15,6 +17,12 @@ $testUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridg
 <div class="section" id="ironclaw-talk-bridge-admin-settings">
 	<h2>Ironclaw Talk Bridge</h2>
 	<p>Serverseitiger Trigger fuer Nextcloud Talk ohne pro-Raum-Botaktivierung.</p>
+
+	<?php if ($uiMessage !== ''): ?>
+		<p style="padding: 10px 12px; border-radius: 6px; background: <?php p($uiStatus === 'success' ? '#e9f7ef' : '#fdecec'); ?>; color: <?php p($uiStatus === 'success' ? '#176b2c' : '#8a1f1f'); ?>; max-width: 720px;">
+			<?php p((string)$uiMessage); ?>
+		</p>
+	<?php endif; ?>
 
 	<form method="post" action="<?php p($actionUrl); ?>">
 		<input type="hidden" name="requesttoken" value="<?php p($_['requesttoken']); ?>">

@@ -15,6 +15,10 @@ class AdminSettings implements ISettings {
 
 	public function getForm(): TemplateResponse {
 		try {
+			$request = \OC::$server->getRequest();
+			$uiStatus = (string)$request->getParam('ictb_status', '');
+			$uiMessage = (string)$request->getParam('ictb_msg', '');
+
 			$secret = $this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', '');
 			$fakeUserId = $this->config->getAppValue(Application::APP_ID, 'fake_user_id', '');
 			$fakeUserName = $this->config->getAppValue(Application::APP_ID, 'mention_display_name', '');
@@ -75,6 +79,8 @@ class AdminSettings implements ISettings {
 					'signature_tolerance_seconds' => $this->config->getAppValue(Application::APP_ID, 'signature_tolerance_seconds', '300'),
 				],
 				'users' => $users,
+				'uiStatus' => $uiStatus,
+				'uiMessage' => $uiMessage,
 				'secretConfigured' => $secret !== '',
 			], '');
 		} catch (\Throwable $e) {
@@ -95,6 +101,8 @@ class AdminSettings implements ISettings {
 					'signature_tolerance_seconds' => '300',
 				],
 				'users' => [],
+				'uiStatus' => 'error',
+				'uiMessage' => 'Interner Fehler beim Laden der Einstellungen. Details im Nextcloud-Log.',
 				'secretConfigured' => false,
 			], '');
 		}

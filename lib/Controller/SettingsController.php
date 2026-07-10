@@ -35,9 +35,18 @@ class SettingsController extends Controller {
 		?string $enabled = null,
 		?string $strict_membership_resolver = null,
 	): RedirectResponse {
+		$trimmedUrl = trim($ironclaw_inbound_url);
+		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
+			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
+				'section' => 'server',
+				'ictb_status' => 'error',
+				'ictb_msg' => 'Bitte eine gueltige Ironclaw URL eintragen.',
+			]));
+		}
+
 		$this->config->setAppValue(Application::APP_ID, 'enabled', $enabled !== null ? '1' : '0');
 		$this->config->setAppValue(Application::APP_ID, 'strict_membership_resolver', $strict_membership_resolver !== null ? '1' : '0');
-		$this->config->setAppValue(Application::APP_ID, 'ironclaw_inbound_url', trim($ironclaw_inbound_url));
+		$this->config->setAppValue(Application::APP_ID, 'ironclaw_inbound_url', $trimmedUrl);
 
 		$uid = trim($fake_user_id);
 		$displayName = '';
@@ -46,6 +55,14 @@ class SettingsController extends Controller {
 			if ($user !== null) {
 				$displayName = (string)$user->getDisplayName();
 			}
+		}
+
+		if ($uid === '' || $displayName === '') {
+			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
+				'section' => 'server',
+				'ictb_status' => 'error',
+				'ictb_msg' => 'Bitte einen gueltigen Fake User aus der Liste waehlen.',
+			]));
 		}
 
 		$this->config->setAppValue(Application::APP_ID, 'mention_display_name', $displayName);
@@ -62,7 +79,11 @@ class SettingsController extends Controller {
 			$this->config->setAppValue(Application::APP_ID, 'ironclaw_shared_secret', $ironclaw_shared_secret);
 		}
 
-		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index'));
+		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
+			'section' => 'server',
+			'ictb_status' => 'success',
+			'ictb_msg' => 'Einstellungen gespeichert.',
+		]));
 	}
 
 	public function testConnection(string $ironclaw_inbound_url = ''): JSONResponse {
