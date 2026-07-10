@@ -209,7 +209,9 @@ class SettingsController extends Controller {
 			return new JSONResponse([
 				'ok' => false,
 				'level' => 'yellow',
-				'message' => 'Host erreichbar (TCP/TLS), aber signierter HTTP-Request fehlgeschlagen.',
+				'reason' => 'transport_exception',
+				'error_detail' => $signed['error'],
+				'message' => 'Host erreichbar (TCP/TLS), aber signierter HTTP-Request fehlgeschlagen.' . ($signed['error'] !== '' ? ' Detail: ' . $signed['error'] : ''),
 			]);
 		}
 
@@ -314,10 +316,15 @@ class SettingsController extends Controller {
 				'error' => $error,
 			];
 		} catch (\Throwable $e) {
+			$detail = trim($e->getMessage());
+			if ($detail === '') {
+				$detail = $e::class;
+			}
+
 			return [
 				'status' => 0,
 				'transport_error' => true,
-				'error' => '',
+				'error' => $detail,
 			];
 		}
 	}
