@@ -164,6 +164,8 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 				method: 'POST',
 				headers: {
 					'requesttoken': requestToken,
+					'Accept': 'application/json',
+					'X-Requested-With': 'XMLHttpRequest',
 					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
 				},
 				body: form.toString(),
@@ -172,7 +174,14 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 
 			const data = await response.json();
 			result.textContent = data && data.message ? data.message : 'Unbekannte Antwort';
-			result.style.color = data && data.ok ? '#008a00' : '#b30000';
+			const level = data && data.level ? String(data.level) : (data && data.ok ? 'green' : 'red');
+			if (level === 'green') {
+				result.style.color = '#008a00';
+			} else if (level === 'yellow') {
+				result.style.color = '#b37a00';
+			} else {
+				result.style.color = '#b30000';
+			}
 		} catch (error) {
 			result.textContent = 'Verbindungstest fehlgeschlagen.';
 			result.style.color = '#b30000';

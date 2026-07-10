@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\Controller;
 
 use OCA\IronclawTalkBridge\AppInfo\Application;
+use OCA\IronclawTalkBridge\Service\OutboundSigner;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\AdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IConfig;
+use OCP\Http\Client\IClientService;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IURLGenerator;
@@ -24,6 +26,8 @@ class SettingsController extends Controller {
 		IRequest $request,
 		private IConfig $config,
 		private IUserManager $userManager,
+		private IClientService $clientService,
+		private OutboundSigner $outboundSigner,
 		private IURLGenerator $urlGenerator,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -136,6 +140,7 @@ class SettingsController extends Controller {
 		if (filter_var($url, FILTER_VALIDATE_URL) === false) {
 			return new JSONResponse([
 				'ok' => false,
+				'level' => 'red',
 				'message' => 'Ironclaw URL ist ungueltig.',
 			], 400);
 		}
@@ -149,6 +154,7 @@ class SettingsController extends Controller {
 		if ($host === '') {
 			return new JSONResponse([
 				'ok' => false,
+				'level' => 'red',
 				'message' => 'Ironclaw URL ist ungueltig (Host fehlt).',
 			], 400);
 		}
@@ -156,6 +162,7 @@ class SettingsController extends Controller {
 		if ($scheme !== 'http' && $scheme !== 'https') {
 			return new JSONResponse([
 				'ok' => false,
+				'level' => 'red',
 				'message' => 'Nur http/https URLs sind erlaubt.',
 			], 400);
 		}
@@ -169,6 +176,7 @@ class SettingsController extends Controller {
 		if ($socket === false) {
 			return new JSONResponse([
 				'ok' => false,
+				'level' => 'red',
 				'message' => 'Verbindung fehlgeschlagen (' . ($errstr !== '' ? $errstr : 'Netzwerkfehler') . ').',
 				'errno' => $errno,
 			], 502);
@@ -176,14 +184,97 @@ class SettingsController extends Controller {
 
 		fclose($socket);
 
-		$message = 'Host erreichbar (TCP/TLS ok).';
-		if (str_contains($path, '/webhooks/nextcloud/talk')) {
-			$message = 'Host erreichbar (TCP/TLS ok). Hinweis: Der Webhook verlangt gueltige Signatur-Header.';
+		$payload = [
+			// Non-Create keeps this a no-op for the channel while still exercising auth checks.
+			'type' => 'Probe',
+			'actor' => ['id' => 'nextcloud-bridge-test'],
+			'object' => ['id' => '0', 'content' => 'connection test'],
+			'target' => ['id' => 'probe-room'],
+		];
+		$body = (string)json_encode($payload, JSON_THROW_ON_ERROR);
+
+		$unsigned = $this->performWebhookProbe($url, [
+			'Content-Type' => 'application/json',
+		], $body);
+
+		if ($unsigned['transport_error']) {
+			return new JSONResponse([
+				'ok' => false,
+				'level' => 'red',
+				'message' => 'Verbindung fehlgeschlagen. HTTP-Request konnte nicht ausgefuehrt werden.',
+			], 502);
+		}
+
+		$sharedSecret = trim($this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', ''));
+		if ($sharedSecret === '') {
+			return new JSONResponse([
+				'ok' => false,
+				'level' => 'yellow',
+				'status' => $unsigned['status'],
+				'message' => 'Verbindung vorhanden, aber keine Signatur konfiguriert (Shared Secret fehlt).',
+			]);
+		}
+
+		$signedHeaders = $this->outboundSigner->buildHeaders($body, $sharedSecret);
+		$signed = $this->performWebhookProbe($url, $signedHeaders, $body);
+
+		if ($signed['transport_error']) {
+			return new JSONResponse([
+				'ok' => false,
+				'level' => 'red',
+				'message' => 'Verbindung fehlgeschlagen. Signierter HTTP-Request konnte nicht ausgefuehrt werden.',
+			], 502);
+		}
+
+		if ($signed['status'] >= 200 && $signed['status'] < 300) {
+			return new JSONResponse([
+				'ok' => true,
+				'level' => 'green',
+				'status' => $signed['status'],
+				'message' => 'Verbindung mit Signatur erfolgreich (HTTP ' . $signed['status'] . ').',
+			]);
+		}
+
+		if ($signed['status'] === 401) {
+			return new JSONResponse([
+				'ok' => false,
+				'level' => 'yellow',
+				'status' => $signed['status'],
+				'message' => 'Verbindung vorhanden, aber Signatur abgelehnt (Shared Secret stimmt vermutlich nicht).',
+			]);
 		}
 
 		return new JSONResponse([
-			'ok' => true,
-			'message' => $message,
+			'ok' => false,
+			'level' => 'yellow',
+			'status' => $signed['status'],
+			'message' => 'Verbindung vorhanden, aber Signaturtest nicht erfolgreich (HTTP ' . $signed['status'] . ').',
 		]);
+	}
+
+	/**
+	 * @param array<string, string> $headers
+	 * @return array{status:int, transport_error:bool}
+	 */
+	private function performWebhookProbe(string $url, array $headers, string $body): array {
+		try {
+			$client = $this->clientService->newClient();
+			$response = $client->post($url, [
+				'headers' => $headers,
+				'body' => $body,
+				'timeout' => 10,
+				'connect_timeout' => 5,
+			]);
+
+			return [
+				'status' => $response->getStatusCode(),
+				'transport_error' => false,
+			];
+		} catch (\Throwable $e) {
+			return [
+				'status' => 0,
+				'transport_error' => true,
+			];
+		}
 	}
 }
