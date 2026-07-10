@@ -9,12 +9,15 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IConfig;
+use OCP\IGroupManager;
 use OCP\Http\Client\IClientService;
 use OCP\IRequest;
+use OCP\IUserSession;
 use OCP\IUserManager;
 use OCP\IURLGenerator;
 
 class SettingsController extends Controller {
+	private const SETTINGS_SECTION = 'ironclaw-talk-bridge';
 	private const SETTINGS_ANCHOR = '#ironclaw-talk-bridge-admin-settings';
 
 	public function __construct(
@@ -23,8 +26,19 @@ class SettingsController extends Controller {
 		private IUserManager $userManager,
 		private IClientService $clientService,
 		private IURLGenerator $urlGenerator,
+		private IUserSession $userSession,
+		private IGroupManager $groupManager,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	private function isCurrentUserAdmin(): bool {
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return false;
+		}
+
+		return $this->groupManager->isAdmin($user->getUID());
 	}
 
 	public function save(
@@ -37,11 +51,19 @@ class SettingsController extends Controller {
 		?string $enabled = null,
 		?string $strict_membership_resolver = null,
 	): RedirectResponse {
+		if (!$this->isCurrentUserAdmin()) {
+			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
+				'section' => self::SETTINGS_SECTION,
+				'ictb_status' => 'error',
+				'ictb_msg' => 'Keine Berechtigung fuer diese Aktion.',
+			]) . self::SETTINGS_ANCHOR);
+		}
+
 		$trimmedUrl = trim($ironclaw_inbound_url);
 		$redirectNonce = (string)time();
 		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-				'section' => 'server',
+				'section' => self::SETTINGS_SECTION,
 				'ictb_status' => 'error',
 				'ictb_msg' => 'Bitte eine gueltige Ironclaw URL eintragen.',
 				'ictb_ts' => $redirectNonce,
@@ -63,7 +85,7 @@ class SettingsController extends Controller {
 
 		if ($uid === '' || $displayName === '') {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-				'section' => 'server',
+				'section' => self::SETTINGS_SECTION,
 				'ictb_status' => 'error',
 				'ictb_msg' => 'Bitte einen gueltigen Fake User aus der Liste waehlen.',
 				'ictb_ts' => $redirectNonce,
@@ -85,7 +107,7 @@ class SettingsController extends Controller {
 		}
 
 		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-			'section' => 'server',
+			'section' => self::SETTINGS_SECTION,
 			'ictb_status' => 'success',
 			'ictb_msg' => 'Einstellungen gespeichert.',
 			'ictb_ts' => $redirectNonce,
@@ -93,6 +115,13 @@ class SettingsController extends Controller {
 	}
 
 	public function testConnection(string $ironclaw_inbound_url = ''): JSONResponse {
+		if (!$this->isCurrentUserAdmin()) {
+			return new JSONResponse([
+				'ok' => false,
+				'message' => 'Keine Berechtigung fuer diese Aktion.',
+			], 403);
+		}
+
 		$url = trim($ironclaw_inbound_url);
 		if ($url === '') {
 			$url = trim($this->config->getAppValue(Application::APP_ID, 'ironclaw_inbound_url', ''));
@@ -134,7 +163,7 @@ class SettingsController extends Controller {
 		} catch (\Throwable $e) {
 			return new JSONResponse([
 				'ok' => false,
-				'message' => 'Verbindungstest fehlgeschlagen: ' . $e->getMessage(),
+				'message' => 'Verbindungstest fehlgeschlagen. Bitte URL/Proxy/TLS pruefen.',
 			], 502);
 		}
 	}

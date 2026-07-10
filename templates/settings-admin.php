@@ -10,8 +10,8 @@ $values = $_['values'];
 $users = $_['users'] ?? [];
 $uiStatus = $_['uiStatus'] ?? '';
 $uiMessage = $_['uiMessage'] ?? '';
-$actionUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridge/settings/admin/save');
-$testUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridge/settings/admin/test-connection');
+$actionUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Settings.save');
+$testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Settings.testConnection');
 ?>
 
 <div class="section" id="ironclaw-talk-bridge-admin-settings">
