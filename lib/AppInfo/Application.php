@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\AppInfo;
 
 use OCA\IronclawTalkBridge\BackgroundJob\RetryQueuedEventsJob;
-use OCA\IronclawTalkBridge\Command\DispatchQueuedEvents;
-use OCA\IronclawTalkBridge\Command\ShowBridgeMetrics;
 use OCA\IronclawTalkBridge\Listener\ChatMessageSentListener;
 use OCA\Talk\Events\ChatMessageSentEvent;
 use OCP\AppFramework\App;
@@ -24,8 +22,6 @@ class Application extends App implements IBootstrap {
 
 	public function register(IRegistrationContext $context): void {
 		$context->registerEventListener(ChatMessageSentEvent::class, ChatMessageSentListener::class);
-		$context->registerCommand(DispatchQueuedEvents::class);
-		$context->registerCommand(ShowBridgeMetrics::class);
 	}
 
 	public function boot(IBootContext $context): void {
