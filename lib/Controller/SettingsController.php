@@ -15,6 +15,8 @@ use OCP\IUserManager;
 use OCP\IURLGenerator;
 
 class SettingsController extends Controller {
+	private const SETTINGS_ANCHOR = '#ironclaw-talk-bridge-admin-settings';
+
 	public function __construct(
 		IRequest $request,
 		private IConfig $config,
@@ -41,7 +43,7 @@ class SettingsController extends Controller {
 				'section' => 'server',
 				'ictb_status' => 'error',
 				'ictb_msg' => 'Bitte eine gueltige Ironclaw URL eintragen.',
-			]));
+			]) . self::SETTINGS_ANCHOR);
 		}
 
 		$this->config->setAppValue(Application::APP_ID, 'enabled', $enabled !== null ? '1' : '0');
@@ -62,7 +64,7 @@ class SettingsController extends Controller {
 				'section' => 'server',
 				'ictb_status' => 'error',
 				'ictb_msg' => 'Bitte einen gueltigen Fake User aus der Liste waehlen.',
-			]));
+			]) . self::SETTINGS_ANCHOR);
 		}
 
 		$this->config->setAppValue(Application::APP_ID, 'mention_display_name', $displayName);
@@ -83,7 +85,7 @@ class SettingsController extends Controller {
 			'section' => 'server',
 			'ictb_status' => 'success',
 			'ictb_msg' => 'Einstellungen gespeichert.',
-		]));
+		]) . self::SETTINGS_ANCHOR);
 	}
 
 	public function testConnection(string $ironclaw_inbound_url = ''): JSONResponse {
