@@ -193,24 +193,11 @@ class SettingsController extends Controller {
 		];
 		$body = (string)json_encode($payload, JSON_THROW_ON_ERROR);
 
-		$unsigned = $this->performWebhookProbe($url, [
-			'Content-Type' => 'application/json',
-		], $body);
-
-		if ($unsigned['transport_error']) {
-			return new JSONResponse([
-				'ok' => false,
-				'level' => 'red',
-				'message' => 'Verbindung fehlgeschlagen. HTTP-Request konnte nicht ausgefuehrt werden.',
-			], 502);
-		}
-
 		$sharedSecret = trim($this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', ''));
 		if ($sharedSecret === '') {
 			return new JSONResponse([
 				'ok' => false,
 				'level' => 'yellow',
-				'status' => $unsigned['status'],
 				'message' => 'Verbindung vorhanden, aber keine Signatur konfiguriert (Shared Secret fehlt).',
 			]);
 		}
@@ -221,9 +208,9 @@ class SettingsController extends Controller {
 		if ($signed['transport_error']) {
 			return new JSONResponse([
 				'ok' => false,
-				'level' => 'red',
-				'message' => 'Verbindung fehlgeschlagen. Signierter HTTP-Request konnte nicht ausgefuehrt werden.',
-			], 502);
+				'level' => 'yellow',
+				'message' => 'Host erreichbar (TCP/TLS), aber signierter HTTP-Request fehlgeschlagen.',
+			]);
 		}
 
 		if ($signed['status'] >= 200 && $signed['status'] < 300) {

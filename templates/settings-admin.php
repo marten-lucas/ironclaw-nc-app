@@ -172,7 +172,26 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 				credentials: 'same-origin',
 			});
 
-			const data = await response.json();
+			const raw = await response.text();
+			let data = null;
+			try {
+				data = JSON.parse(raw);
+			} catch (e) {
+				data = null;
+			}
+
+			if (!data) {
+				if (response.status >= 500) {
+					result.textContent = 'Verbindung vorhanden, aber Test-Endpunkt liefert Gateway/Serverfehler (HTTP ' + response.status + ').';
+					result.style.color = '#b37a00';
+					return;
+				}
+
+				result.textContent = 'Unbekannte Antwort';
+				result.style.color = '#b30000';
+				return;
+			}
+
 			result.textContent = data && data.message ? data.message : 'Unbekannte Antwort';
 			const level = data && data.level ? String(data.level) : (data && data.ok ? 'green' : 'red');
 			if (level === 'green') {
