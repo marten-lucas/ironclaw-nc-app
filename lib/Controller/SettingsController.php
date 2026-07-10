@@ -38,11 +38,13 @@ class SettingsController extends Controller {
 		?string $strict_membership_resolver = null,
 	): RedirectResponse {
 		$trimmedUrl = trim($ironclaw_inbound_url);
+		$redirectNonce = (string)time();
 		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
 				'section' => 'server',
 				'ictb_status' => 'error',
 				'ictb_msg' => 'Bitte eine gueltige Ironclaw URL eintragen.',
+				'ictb_ts' => $redirectNonce,
 			]) . self::SETTINGS_ANCHOR);
 		}
 
@@ -64,6 +66,7 @@ class SettingsController extends Controller {
 				'section' => 'server',
 				'ictb_status' => 'error',
 				'ictb_msg' => 'Bitte einen gueltigen Fake User aus der Liste waehlen.',
+				'ictb_ts' => $redirectNonce,
 			]) . self::SETTINGS_ANCHOR);
 		}
 
@@ -85,6 +88,7 @@ class SettingsController extends Controller {
 			'section' => 'server',
 			'ictb_status' => 'success',
 			'ictb_msg' => 'Einstellungen gespeichert.',
+			'ictb_ts' => $redirectNonce,
 		]) . self::SETTINGS_ANCHOR);
 	}
 
