@@ -7,7 +7,9 @@
 /** @var array $_ */
 
 $values = $_['values'];
+$users = $_['users'] ?? [];
 $actionUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridge/settings/admin/save');
+$testUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bridge/settings/admin/test-connection');
 ?>
 
 <div class="section" id="ironclaw-talk-bridge-admin-settings">
@@ -43,13 +45,17 @@ $actionUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bri
 		</p>
 
 		<p>
-			<label for="ictb_fake_user_name"><strong>Fake User Name (Mention-Anzeigename)</strong></label><br>
-			<input type="text" id="ictb_fake_user_name" name="fake_user_name" required style="width: 100%; max-width: 480px;" value="<?php p($values['fake_user_name']); ?>" placeholder="Ironclaw">
-		</p>
-
-		<p>
-			<label for="ictb_fake_user_id"><strong>Fake User ID (fuer Loop-Schutz, optional aber empfohlen)</strong></label><br>
-			<input type="text" id="ictb_fake_user_id" name="fake_user_id" style="width: 100%; max-width: 480px;" value="<?php p($values['fake_user_id']); ?>" placeholder="ironclaw-bot-userid">
+			<label for="ictb_fake_user_id"><strong>Fake User (Name + ID)</strong></label><br>
+			<select id="ictb_fake_user_id" name="fake_user_id" required style="width: 100%; max-width: 480px;">
+				<option value="">Bitte Benutzer waehlen</option>
+				<?php foreach ($users as $user): ?>
+					<option
+						value="<?php p((string)$user['uid']); ?>"
+						<?php if ((string)$values['fake_user_id'] === (string)$user['uid']) { p('selected'); } ?>>
+						<?php p((string)$user['displayName'] . ' (' . (string)$user['uid'] . ')'); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
 		</p>
 
 		<p>
@@ -75,7 +81,50 @@ $actionUrl = \OC::$server->getURLGenerator()->linkTo('', 'apps/ironclaw_talk_bri
 		</p>
 
 		<p>
+			<button type="button" id="ictb_test_connection">Verbindung testen</button>
+			<span id="ictb_test_result" style="margin-left: 10px;"></span>
+		</p>
+
+		<p>
 			<button class="primary" type="submit">Einstellungen speichern</button>
 		</p>
 	</form>
 </div>
+
+<script>
+(function () {
+	const button = document.getElementById('ictb_test_connection');
+	const result = document.getElementById('ictb_test_result');
+	const urlInput = document.getElementById('ictb_ironclaw_url');
+	if (!button || !result || !urlInput) {
+		return;
+	}
+
+	button.addEventListener('click', async function () {
+		result.textContent = 'Teste...';
+		result.style.color = '';
+
+		const form = new URLSearchParams();
+		form.set('requesttoken', <?php echo json_encode((string)$_['requesttoken']); ?>);
+		form.set('ironclaw_inbound_url', String(urlInput.value || '').trim());
+
+		try {
+			const response = await fetch(<?php echo json_encode($testUrl); ?>, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+				},
+				body: form.toString(),
+				credentials: 'same-origin',
+			});
+
+			const data = await response.json();
+			result.textContent = data && data.message ? data.message : 'Unbekannte Antwort';
+			result.style.color = data && data.ok ? '#008a00' : '#b30000';
+		} catch (error) {
+			result.textContent = 'Verbindungstest fehlgeschlagen.';
+			result.style.color = '#b30000';
+		}
+	});
+})();
+</script>

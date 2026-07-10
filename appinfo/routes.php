@@ -9,5 +9,10 @@ return [
 			'url' => '/settings/admin/save',
 			'verb' => 'POST',
 		],
+		[
+			'name' => 'Settings#testConnection',
+			'url' => '/settings/admin/test-connection',
+			'verb' => 'POST',
+		],
 	],
 ];
