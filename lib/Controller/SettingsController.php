@@ -6,6 +6,7 @@ namespace OCA\IronclawTalkBridge\Controller;
 
 use OCA\IronclawTalkBridge\AppInfo\Application;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\AdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IConfig;
@@ -14,6 +15,7 @@ use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IURLGenerator;
 
+#[AdminRequired]
 class SettingsController extends Controller {
 	private const SETTINGS_SECTION = Application::APP_ID;
 	private const SETTINGS_ANCHOR = '#ironclaw-talk-bridge-admin-settings';

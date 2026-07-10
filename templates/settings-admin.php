@@ -113,15 +113,17 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 	button.addEventListener('click', async function () {
 		result.textContent = 'Teste...';
 		result.style.color = '';
+		const requestToken = <?php echo json_encode((string)$_['requesttoken']); ?>;
 
 		const form = new URLSearchParams();
-		form.set('requesttoken', <?php echo json_encode((string)$_['requesttoken']); ?>);
+		form.set('requesttoken', requestToken);
 		form.set('ironclaw_inbound_url', String(urlInput.value || '').trim());
 
 		try {
 			const response = await fetch(<?php echo json_encode($testUrl); ?>, {
 				method: 'POST',
 				headers: {
+					'requesttoken': requestToken,
 					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
 				},
 				body: form.toString(),
