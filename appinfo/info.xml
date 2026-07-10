@@ -13,6 +13,7 @@
   </types>
   <settings>
     <admin>OCA\IronclawTalkBridge\Settings\AdminSettings</admin>
+    <admin-section>OCA\IronclawTalkBridge\Settings\AdminSection</admin-section>
   </settings>
   <commands>
     <command>OCA\IronclawTalkBridge\Command\DispatchQueuedEvents</command>

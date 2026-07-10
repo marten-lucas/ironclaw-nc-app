@@ -32,7 +32,7 @@ class AdminSettings implements ISettings {
 	}
 
 	public function getSection(): ?string {
-		return 'server';
+		return Application::APP_ID . '-admin';
 	}
 
 	public function getPriority(): int {
