@@ -109,7 +109,7 @@ class AdminSettings implements ISettings {
 	}
 
 	public function getSection(): ?string {
-		return Application::APP_ID;
+		return 'server';
 	}
 
 	public function getPriority(): int {
