@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\Controller;
 
 use OCA\IronclawTalkBridge\AppInfo\Application;
+use OCA\IronclawTalkBridge\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IConfig;
-use OCP\IGroupManager;
 use OCP\Http\Client\IClientService;
 use OCP\IRequest;
-use OCP\IUserSession;
 use OCP\IUserManager;
 use OCP\IURLGenerator;
 
@@ -26,21 +26,11 @@ class SettingsController extends Controller {
 		private IUserManager $userManager,
 		private IClientService $clientService,
 		private IURLGenerator $urlGenerator,
-		private IUserSession $userSession,
-		private IGroupManager $groupManager,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
 
-	private function isCurrentUserAdmin(): bool {
-		$user = $this->userSession->getUser();
-		if ($user === null) {
-			return false;
-		}
-
-		return $this->groupManager->isAdmin($user->getUID());
-	}
-
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function save(
 		string $ironclaw_inbound_url,
 		string $fake_user_id = '',
@@ -51,12 +41,6 @@ class SettingsController extends Controller {
 		?string $enabled = null,
 		?string $strict_membership_resolver = null,
 	): RedirectResponse {
-		if (!$this->isCurrentUserAdmin()) {
-			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-				'section' => self::SETTINGS_SECTION,
-			]) . self::SETTINGS_ANCHOR);
-		}
-
 		$trimmedUrl = trim($ironclaw_inbound_url);
 		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
@@ -102,14 +86,8 @@ class SettingsController extends Controller {
 		]) . self::SETTINGS_ANCHOR);
 	}
 
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function testConnection(string $ironclaw_inbound_url = ''): JSONResponse {
-		if (!$this->isCurrentUserAdmin()) {
-			return new JSONResponse([
-				'ok' => false,
-				'message' => 'Keine Berechtigung fuer diese Aktion.',
-			], 403);
-		}
-
 		$url = trim($ironclaw_inbound_url);
 		if ($url === '') {
 			$url = trim($this->config->getAppValue(Application::APP_ID, 'ironclaw_inbound_url', ''));
