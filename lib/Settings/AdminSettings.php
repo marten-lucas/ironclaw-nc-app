@@ -7,9 +7,9 @@ namespace OCA\IronclawTalkBridge\Settings;
 use OCA\IronclawTalkBridge\AppInfo\Application;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
-use OCP\Settings\IDelegatedSettings;
+use OCP\Settings\ISettings;
 
-class AdminSettings implements IDelegatedSettings {
+class AdminSettings implements ISettings {
 	public function __construct(private IConfig $config) {
 	}
 
@@ -41,11 +41,5 @@ class AdminSettings implements IDelegatedSettings {
 
 	public function getName(): ?string {
 		return 'Ironclaw Talk Bridge';
-	}
-
-	public function getAuthorizedAppConfig(): array {
-		return [
-			Application::APP_ID => '/.*/',
-		];
 	}
 }
