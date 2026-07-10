@@ -20,13 +20,45 @@ class AdminSettings implements ISettings {
 	public function getForm(): TemplateResponse {
 		$secret = $this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', '');
 		$fakeUserId = $this->config->getAppValue(Application::APP_ID, 'fake_user_id', '');
+		$fakeUserName = $this->config->getAppValue(Application::APP_ID, 'mention_display_name', '');
 		$users = [];
-		foreach ($this->userManager->search('') as $user) {
-			$users[] = [
-				'uid' => $user->getUID(),
-				'displayName' => $user->getDisplayName(),
-			];
+
+		// Keep settings page available even if user directory lookup fails.
+		try {
+			$foundUsers = [];
+			if (method_exists($this->userManager, 'searchDisplayName')) {
+				$foundUsers = $this->userManager->searchDisplayName('');
+			} elseif (method_exists($this->userManager, 'search')) {
+				$foundUsers = $this->userManager->search('');
+			}
+
+			foreach ($foundUsers as $user) {
+				$users[] = [
+					'uid' => $user->getUID(),
+					'displayName' => $user->getDisplayName(),
+				];
+			}
+		} catch (\Throwable $e) {
+			$users = [];
 		}
+
+		if ($fakeUserId !== '') {
+			$hasSelectedUser = false;
+			foreach ($users as $user) {
+				if ((string)$user['uid'] === (string)$fakeUserId) {
+					$hasSelectedUser = true;
+					break;
+				}
+			}
+
+			if (!$hasSelectedUser) {
+				$users[] = [
+					'uid' => $fakeUserId,
+					'displayName' => $fakeUserName !== '' ? $fakeUserName : $fakeUserId,
+				];
+			}
+		}
+
 		usort($users, static function (array $a, array $b): int {
 			return strcmp((string)$a['displayName'], (string)$b['displayName']);
 		});
@@ -36,7 +68,7 @@ class AdminSettings implements ISettings {
 				'enabled' => $this->config->getAppValue(Application::APP_ID, 'enabled', '0') === '1',
 				'strict_membership_resolver' => $this->config->getAppValue(Application::APP_ID, 'strict_membership_resolver', '1') === '1',
 				'ironclaw_inbound_url' => $this->config->getAppValue(Application::APP_ID, 'ironclaw_inbound_url', ''),
-				'fake_user_name' => $this->config->getAppValue(Application::APP_ID, 'mention_display_name', ''),
+				'fake_user_name' => $fakeUserName,
 				'fake_user_id' => $fakeUserId,
 				'room_allowlist_tokens' => $this->config->getAppValue(Application::APP_ID, 'room_allowlist_tokens', ''),
 				'dispatch_batch_size' => $this->config->getAppValue(Application::APP_ID, 'dispatch_batch_size', '50'),
