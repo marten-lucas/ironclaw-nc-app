@@ -12,7 +12,7 @@ class AppConfig {
 	}
 
 	public function isEnabled(): bool {
-		return $this->config->getAppValue(Application::APP_ID, 'enabled', '0') === '1';
+		return $this->config->getAppValue(Application::APP_ID, 'bridge_enabled', '0') === '1';
 	}
 
 	public function getIronclawInboundUrl(): string {

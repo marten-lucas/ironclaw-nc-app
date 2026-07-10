@@ -97,23 +97,63 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 
 		<p>
 			<button class="primary" type="submit">Einstellungen speichern</button>
+			<span id="ictb_save_result" style="margin-left: 10px;"></span>
 		</p>
 	</form>
 </div>
 
 <script>
 (function () {
+	const formEl = document.querySelector('#ironclaw-talk-bridge-admin-settings form');
 	const button = document.getElementById('ictb_test_connection');
 	const result = document.getElementById('ictb_test_result');
+	const saveResult = document.getElementById('ictb_save_result');
 	const urlInput = document.getElementById('ictb_ironclaw_url');
-	if (!button || !result || !urlInput) {
+	if (!formEl || !button || !result || !saveResult || !urlInput) {
 		return;
 	}
+
+	const requestToken = <?php echo json_encode((string)$_['requesttoken']); ?>;
+
+	formEl.addEventListener('submit', async function (event) {
+		event.preventDefault();
+		saveResult.textContent = 'Speichere...';
+		saveResult.style.color = '';
+
+		const formData = new URLSearchParams(new FormData(formEl));
+
+		try {
+			const response = await fetch(formEl.action, {
+				method: 'POST',
+				headers: {
+					'Accept': 'application/json',
+					'X-Requested-With': 'XMLHttpRequest',
+					'requesttoken': requestToken,
+					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+				},
+				body: formData.toString(),
+				credentials: 'same-origin',
+			});
+
+			let data = null;
+			try {
+				data = await response.json();
+			} catch (e) {
+				data = null;
+			}
+
+			const ok = response.ok && data && data.ok;
+			saveResult.textContent = data && data.message ? data.message : (ok ? 'Einstellungen gespeichert.' : 'Speichern fehlgeschlagen.');
+			saveResult.style.color = ok ? '#008a00' : '#b30000';
+		} catch (error) {
+			saveResult.textContent = 'Speichern fehlgeschlagen.';
+			saveResult.style.color = '#b30000';
+		}
+	});
 
 	button.addEventListener('click', async function () {
 		result.textContent = 'Teste...';
 		result.style.color = '';
-		const requestToken = <?php echo json_encode((string)$_['requesttoken']); ?>;
 
 		const form = new URLSearchParams();
 		form.set('requesttoken', requestToken);

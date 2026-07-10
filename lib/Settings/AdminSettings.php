@@ -69,7 +69,7 @@ class AdminSettings implements ISettings {
 
 			return new TemplateResponse(Application::APP_ID, 'settings-admin', [
 				'values' => [
-					'enabled' => $this->config->getAppValue(Application::APP_ID, 'enabled', '0') === '1',
+					'enabled' => $this->config->getAppValue(Application::APP_ID, 'bridge_enabled', '0') === '1',
 					'strict_membership_resolver' => $this->config->getAppValue(Application::APP_ID, 'strict_membership_resolver', '1') === '1',
 					'ironclaw_inbound_url' => $this->config->getAppValue(Application::APP_ID, 'ironclaw_inbound_url', ''),
 					'fake_user_name' => $fakeUserName,

@@ -9,6 +9,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\AdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
+use OCP\AppFramework\Http\Response;
 use OCP\IConfig;
 use OCP\Http\Client\IClientService;
 use OCP\IRequest;
@@ -41,16 +42,14 @@ class SettingsController extends Controller {
 		?string $enabled = null,
 		?string $strict_membership_present = null,
 		?string $strict_membership_resolver = null,
-	): RedirectResponse {
+	): Response {
 		$trimmedUrl = trim($ironclaw_inbound_url);
 		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
-			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-				'section' => self::SETTINGS_SECTION,
-			]) . self::SETTINGS_ANCHOR);
+			return $this->saveError('Ironclaw URL ist ungueltig.', 400);
 		}
 
 		if ($enabled_present !== null) {
-			$this->config->setAppValue(Application::APP_ID, 'enabled', $enabled !== null ? '1' : '0');
+			$this->config->setAppValue(Application::APP_ID, 'bridge_enabled', $enabled !== null ? '1' : '0');
 		}
 		if ($strict_membership_present !== null) {
 			$this->config->setAppValue(Application::APP_ID, 'strict_membership_resolver', $strict_membership_resolver !== null ? '1' : '0');
@@ -67,9 +66,7 @@ class SettingsController extends Controller {
 		}
 
 		if ($uid === '' || $displayName === '') {
-			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-				'section' => self::SETTINGS_SECTION,
-			]) . self::SETTINGS_ANCHOR);
+			return $this->saveError('Fake User ist ungueltig oder nicht vorhanden.', 400);
 		}
 
 		$this->config->setAppValue(Application::APP_ID, 'mention_display_name', $displayName);
@@ -86,9 +83,42 @@ class SettingsController extends Controller {
 			$this->config->setAppValue(Application::APP_ID, 'ironclaw_shared_secret', $ironclaw_shared_secret);
 		}
 
-		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
+		return $this->saveSuccess();
+	}
+
+	private function getSettingsUrl(): string {
+		return $this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
 			'section' => self::SETTINGS_SECTION,
-		]) . self::SETTINGS_ANCHOR);
+		]) . self::SETTINGS_ANCHOR;
+	}
+
+	private function isAjaxRequest(): bool {
+		$requestedWith = strtolower((string)$this->request->getHeader('X-Requested-With'));
+		$accept = strtolower((string)$this->request->getHeader('Accept'));
+
+		return $requestedWith === 'xmlhttprequest' || str_contains($accept, 'application/json');
+	}
+
+	private function saveError(string $message, int $statusCode): Response {
+		if ($this->isAjaxRequest()) {
+			return new JSONResponse([
+				'ok' => false,
+				'message' => $message,
+			], $statusCode);
+		}
+
+		return new RedirectResponse($this->getSettingsUrl());
+	}
+
+	private function saveSuccess(): Response {
+		if ($this->isAjaxRequest()) {
+			return new JSONResponse([
+				'ok' => true,
+				'message' => 'Einstellungen gespeichert.',
+			]);
+		}
+
+		return new RedirectResponse($this->getSettingsUrl());
 	}
 
 
