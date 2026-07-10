@@ -21,6 +21,6 @@ class AdminSection implements IIconSection {
 	}
 
 	public function getIcon(): string {
-		return '';
+		return '/core/img/actions/settings.svg';
 	}
 }

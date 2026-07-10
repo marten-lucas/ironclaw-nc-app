@@ -12,6 +12,7 @@
     <background-job/>
   </types>
   <settings>
+    <admin-section>OCA\IronclawTalkBridge\Settings\AdminSection</admin-section>
     <admin>OCA\IronclawTalkBridge\Settings\AdminSettings</admin>
   </settings>
   <commands>

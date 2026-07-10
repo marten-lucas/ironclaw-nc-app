@@ -109,7 +109,7 @@ class AdminSettings implements ISettings {
 	}
 
 	public function getSection(): ?string {
-		return 'server';
+		return 'ironclaw-talk-bridge';
 	}
 
 	public function getPriority(): int {
