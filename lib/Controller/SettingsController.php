@@ -81,8 +81,9 @@ class SettingsController extends Controller {
 		$tolerance = max(60, min(3600, (int)$signature_tolerance_seconds));
 		$this->config->setAppValue(Application::APP_ID, 'signature_tolerance_seconds', (string)$tolerance);
 
-		if (trim($ironclaw_shared_secret) !== '') {
-			$this->config->setAppValue(Application::APP_ID, 'ironclaw_shared_secret', $ironclaw_shared_secret);
+		$normalizedSharedSecret = trim($ironclaw_shared_secret);
+		if ($normalizedSharedSecret !== '') {
+			$this->config->setAppValue(Application::APP_ID, 'ironclaw_shared_secret', $normalizedSharedSecret);
 		}
 
 		return $this->saveSuccess();
@@ -194,6 +195,7 @@ class SettingsController extends Controller {
 		$body = (string)json_encode($payload, JSON_THROW_ON_ERROR);
 
 		$sharedSecret = $this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', '');
+		$trimmedSharedSecret = trim($sharedSecret);
 		if ($sharedSecret === '') {
 			return new JSONResponse([
 				'ok' => false,
@@ -202,7 +204,16 @@ class SettingsController extends Controller {
 			]);
 		}
 
-		$signedHeaders = $this->outboundSigner->buildHeaders($body, $sharedSecret);
+		if ($sharedSecret !== $trimmedSharedSecret) {
+			return new JSONResponse([
+				'ok' => false,
+				'level' => 'yellow',
+				'reason' => 'secret_whitespace_mismatch',
+				'message' => 'Shared Secret enthaelt fuehrende/trailende Leerzeichen. Bitte in Nextcloud neu speichern.',
+			]);
+		}
+
+		$signedHeaders = $this->outboundSigner->buildHeaders($body, $trimmedSharedSecret);
 		$signed = $this->performWebhookProbe($url, $signedHeaders, $body);
 
 		if ($signed['transport_error']) {
