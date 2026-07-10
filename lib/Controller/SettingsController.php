@@ -62,9 +62,7 @@ class SettingsController extends Controller {
 			$this->config->setAppValue(Application::APP_ID, 'ironclaw_shared_secret', $ironclaw_shared_secret);
 		}
 
-		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
-			'section' => Application::APP_ID . '-admin',
-		]));
+		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index'));
 	}
 
 	public function testConnection(string $ironclaw_inbound_url = ''): JSONResponse {

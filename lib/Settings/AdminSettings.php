@@ -7,14 +7,10 @@ namespace OCA\IronclawTalkBridge\Settings;
 use OCA\IronclawTalkBridge\AppInfo\Application;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
-use OCP\IUserManager;
 use OCP\Settings\ISettings;
 
 class AdminSettings implements ISettings {
-	public function __construct(
-		private IConfig $config,
-		private IUserManager $userManager,
-	) {
+	public function __construct(private IConfig $config) {
 	}
 
 	public function getForm(): TemplateResponse {
@@ -26,10 +22,13 @@ class AdminSettings implements ISettings {
 		// Keep settings page available even if user directory lookup fails.
 		try {
 			$foundUsers = [];
-			if (method_exists($this->userManager, 'searchDisplayName')) {
-				$foundUsers = $this->userManager->searchDisplayName('');
-			} elseif (method_exists($this->userManager, 'search')) {
-				$foundUsers = $this->userManager->search('');
+			$userManager = \OC::$server->getUserManager();
+			if ($userManager !== null) {
+				if (method_exists($userManager, 'searchDisplayName')) {
+					$foundUsers = $userManager->searchDisplayName('');
+				} elseif (method_exists($userManager, 'search')) {
+					$foundUsers = $userManager->search('');
+				}
 			}
 
 			foreach ($foundUsers as $user) {
