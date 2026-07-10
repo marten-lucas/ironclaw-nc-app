@@ -54,19 +54,13 @@ class SettingsController extends Controller {
 		if (!$this->isCurrentUserAdmin()) {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
 				'section' => self::SETTINGS_SECTION,
-				'ictb_status' => 'error',
-				'ictb_msg' => 'Keine Berechtigung fuer diese Aktion.',
 			]) . self::SETTINGS_ANCHOR);
 		}
 
 		$trimmedUrl = trim($ironclaw_inbound_url);
-		$redirectNonce = (string)time();
 		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
 				'section' => self::SETTINGS_SECTION,
-				'ictb_status' => 'error',
-				'ictb_msg' => 'Bitte eine gueltige Ironclaw URL eintragen.',
-				'ictb_ts' => $redirectNonce,
 			]) . self::SETTINGS_ANCHOR);
 		}
 
@@ -86,9 +80,6 @@ class SettingsController extends Controller {
 		if ($uid === '' || $displayName === '') {
 			return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
 				'section' => self::SETTINGS_SECTION,
-				'ictb_status' => 'error',
-				'ictb_msg' => 'Bitte einen gueltigen Fake User aus der Liste waehlen.',
-				'ictb_ts' => $redirectNonce,
 			]) . self::SETTINGS_ANCHOR);
 		}
 
@@ -108,9 +99,6 @@ class SettingsController extends Controller {
 
 		return new RedirectResponse($this->urlGenerator->linkToRoute('settings.AdminSettings.index', [
 			'section' => self::SETTINGS_SECTION,
-			'ictb_status' => 'success',
-			'ictb_msg' => 'Einstellungen gespeichert.',
-			'ictb_ts' => $redirectNonce,
 		]) . self::SETTINGS_ANCHOR);
 	}
 
