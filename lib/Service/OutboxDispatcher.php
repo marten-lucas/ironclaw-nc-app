@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\Service;
 
 use OCA\IronclawTalkBridge\Db\OutboxRepository;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class OutboxDispatcher {
 	private const MAX_ATTEMPTS = 20;
@@ -15,7 +15,7 @@ class OutboxDispatcher {
 		private IronclawClient $client,
 		private AppConfig $config,
 		private BridgeCounters $counters,
-		private ILogger $logger,
+		private LoggerInterface $logger,
 	) {
 	}
 

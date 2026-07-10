@@ -25,15 +25,15 @@ class Application extends App implements IBootstrap {
 	}
 
 	public function boot(IBootContext $context): void {
-		$context->injectFn(function (IJobList $jobList): void {
-			try {
-				$jobList->add(RetryQueuedEventsJob::class);
-			} catch (\Throwable $e) {
-				\OC::$server->getLogger()->error('Failed to register RetryQueuedEventsJob', [
-					'app' => self::APP_ID,
-					'exception' => $e,
-				]);
-			}
-		});
+		try {
+			/** @var IJobList $jobList */
+			$jobList = $context->getServerContainer()->get(IJobList::class);
+			$jobList->add(RetryQueuedEventsJob::class);
+		} catch (\Throwable $e) {
+			\OC::$server->getLogger()->error('Failed to register RetryQueuedEventsJob', [
+				'app' => self::APP_ID,
+				'exception' => $e,
+			]);
+		}
 	}
 }

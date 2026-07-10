@@ -15,7 +15,7 @@ use OCA\IronclawTalkBridge\Service\TalkEventMapper;
 use OCA\Talk\Events\ChatMessageSentEvent;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 /**
  * @template-implements IEventListener<Event>
@@ -30,7 +30,7 @@ class ChatMessageSentListener implements IEventListener {
 		private OutboxRepository $outbox,
 		private OutboxDispatcher $dispatcher,
 		private BridgeCounters $counters,
-		private ILogger $logger,
+		private LoggerInterface $logger,
 	) {
 	}
 

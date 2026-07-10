@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace OCA\IronclawTalkBridge\Service;
 
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class TalkMembershipResolver {
 	public function __construct(
 		private AppConfig $config,
-		private ILogger $logger,
+		private LoggerInterface $logger,
 	) {
 	}
 
