@@ -9,7 +9,7 @@ use OCP\Settings\IIconSection;
 
 class AdminSection implements IIconSection {
 	public function getID(): string {
-		return 'ironclaw-talk-bridge';
+		return Application::APP_ID;
 	}
 
 	public function getName(): string {
