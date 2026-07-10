@@ -26,6 +26,8 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 
 	<form method="post" action="<?php p($actionUrl); ?>">
 		<input type="hidden" name="requesttoken" value="<?php p($_['requesttoken']); ?>">
+		<input type="hidden" name="enabled_present" value="1">
+		<input type="hidden" name="strict_membership_present" value="1">
 
 		<p>
 			<input

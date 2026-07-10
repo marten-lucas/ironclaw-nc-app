@@ -35,7 +35,9 @@ class SettingsController extends Controller {
 		string $room_allowlist_tokens = '',
 		string $dispatch_batch_size = '50',
 		string $signature_tolerance_seconds = '300',
+		?string $enabled_present = null,
 		?string $enabled = null,
+		?string $strict_membership_present = null,
 		?string $strict_membership_resolver = null,
 	): RedirectResponse {
 		$trimmedUrl = trim($ironclaw_inbound_url);
@@ -45,8 +47,12 @@ class SettingsController extends Controller {
 			]) . self::SETTINGS_ANCHOR);
 		}
 
-		$this->config->setAppValue(Application::APP_ID, 'enabled', $enabled !== null ? '1' : '0');
-		$this->config->setAppValue(Application::APP_ID, 'strict_membership_resolver', $strict_membership_resolver !== null ? '1' : '0');
+		if ($enabled_present !== null) {
+			$this->config->setAppValue(Application::APP_ID, 'enabled', $enabled !== null ? '1' : '0');
+		}
+		if ($strict_membership_present !== null) {
+			$this->config->setAppValue(Application::APP_ID, 'strict_membership_resolver', $strict_membership_resolver !== null ? '1' : '0');
+		}
 		$this->config->setAppValue(Application::APP_ID, 'ironclaw_inbound_url', $trimmedUrl);
 
 		$uid = trim($fake_user_id);
