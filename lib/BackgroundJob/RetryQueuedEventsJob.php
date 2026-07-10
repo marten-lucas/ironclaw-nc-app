@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\BackgroundJob;
 
 use OCA\IronclawTalkBridge\Service\OutboxDispatcher;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 
 class RetryQueuedEventsJob extends TimedJob {
-	public function __construct(private OutboxDispatcher $dispatcher) {
-		parent::__construct();
+	public function __construct(
+		ITimeFactory $time,
+		private OutboxDispatcher $dispatcher,
+	) {
+		parent::__construct($time);
 		$this->setInterval(30);
 	}
 
