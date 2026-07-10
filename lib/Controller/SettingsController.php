@@ -193,7 +193,7 @@ class SettingsController extends Controller {
 		];
 		$body = (string)json_encode($payload, JSON_THROW_ON_ERROR);
 
-		$sharedSecret = trim($this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', ''));
+		$sharedSecret = $this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', '');
 		if ($sharedSecret === '') {
 			return new JSONResponse([
 				'ok' => false,
@@ -223,10 +223,52 @@ class SettingsController extends Controller {
 		}
 
 		if ($signed['status'] === 401) {
+			$reason = $signed['error'];
+			if ($reason === 'stale_timestamp') {
+				return new JSONResponse([
+					'ok' => false,
+					'level' => 'yellow',
+					'status' => $signed['status'],
+					'reason' => $reason,
+					'message' => 'Verbindung vorhanden, aber Signatur wegen Zeitabweichung abgelehnt (stale_timestamp). Uhren von Nextcloud und Ironclaw pruefen.',
+				]);
+			}
+
+			if ($reason === 'missing_signature') {
+				return new JSONResponse([
+					'ok' => false,
+					'level' => 'yellow',
+					'status' => $signed['status'],
+					'reason' => $reason,
+					'message' => 'Verbindung vorhanden, aber Signatur-Header wurden nicht erkannt (missing_signature).',
+				]);
+			}
+
+			if ($reason === 'missing_timestamp' || $reason === 'invalid_timestamp') {
+				return new JSONResponse([
+					'ok' => false,
+					'level' => 'yellow',
+					'status' => $signed['status'],
+					'reason' => $reason,
+					'message' => 'Verbindung vorhanden, aber Timestamp-Header ungueltig (' . $reason . ').',
+				]);
+			}
+
+			if ($reason === 'missing_nonce' || $reason === 'invalid_nonce' || $reason === 'replay_nonce') {
+				return new JSONResponse([
+					'ok' => false,
+					'level' => 'yellow',
+					'status' => $signed['status'],
+					'reason' => $reason,
+					'message' => 'Verbindung vorhanden, aber Nonce-Pruefung fehlgeschlagen (' . $reason . ').',
+				]);
+			}
+
 			return new JSONResponse([
 				'ok' => false,
 				'level' => 'yellow',
 				'status' => $signed['status'],
+				'reason' => $reason,
 				'message' => 'Verbindung vorhanden, aber Signatur abgelehnt (Shared Secret stimmt vermutlich nicht).',
 			]);
 		}
@@ -235,13 +277,14 @@ class SettingsController extends Controller {
 			'ok' => false,
 			'level' => 'yellow',
 			'status' => $signed['status'],
+			'reason' => $signed['error'],
 			'message' => 'Verbindung vorhanden, aber Signaturtest nicht erfolgreich (HTTP ' . $signed['status'] . ').',
 		]);
 	}
 
 	/**
 	 * @param array<string, string> $headers
-	 * @return array{status:int, transport_error:bool}
+	 * @return array{status:int, transport_error:bool, error:string}
 	 */
 	private function performWebhookProbe(string $url, array $headers, string $body): array {
 		try {
@@ -251,16 +294,30 @@ class SettingsController extends Controller {
 				'body' => $body,
 				'timeout' => 10,
 				'connect_timeout' => 5,
+				'http_errors' => false,
 			]);
+
+			$error = '';
+			if (method_exists($response, 'getBody')) {
+				$rawBody = (string)$response->getBody();
+				if ($rawBody !== '') {
+					$decoded = json_decode($rawBody, true);
+					if (is_array($decoded) && isset($decoded['error']) && is_string($decoded['error'])) {
+						$error = $decoded['error'];
+					}
+				}
+			}
 
 			return [
 				'status' => $response->getStatusCode(),
 				'transport_error' => false,
+				'error' => $error,
 			];
 		} catch (\Throwable $e) {
 			return [
 				'status' => 0,
 				'transport_error' => true,
+				'error' => '',
 			];
 		}
 	}
