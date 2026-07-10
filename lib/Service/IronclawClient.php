@@ -28,6 +28,9 @@ class IronclawClient {
 			'body' => $body,
 			'timeout' => 10,
 			'connect_timeout' => 5,
+			'nextcloud' => [
+				'allow_local_address' => true,
+			],
 		]);
 
 		return $response->getStatusCode();

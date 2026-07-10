@@ -297,6 +297,9 @@ class SettingsController extends Controller {
 				'timeout' => 10,
 				'connect_timeout' => 5,
 				'http_errors' => false,
+				'nextcloud' => [
+					'allow_local_address' => true,
+				],
 			]);
 
 			$error = '';
