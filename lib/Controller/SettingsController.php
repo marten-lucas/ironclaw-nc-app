@@ -6,7 +6,6 @@ namespace OCA\IronclawTalkBridge\Controller;
 
 use OCA\IronclawTalkBridge\AppInfo\Application;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\Attribute\AdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IConfig;
@@ -29,7 +28,6 @@ class SettingsController extends Controller {
 		parent::__construct(Application::APP_ID, $request);
 	}
 
-	#[AdminRequired]
 	public function save(
 		string $ironclaw_inbound_url,
 		string $fake_user_id = '',
@@ -85,7 +83,7 @@ class SettingsController extends Controller {
 		]) . self::SETTINGS_ANCHOR);
 	}
 
-	#[AdminRequired]
+
 	public function testConnection(string $ironclaw_inbound_url = ''): JSONResponse {
 		$url = trim($ironclaw_inbound_url);
 		if ($url === '') {
