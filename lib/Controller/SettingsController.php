@@ -11,7 +11,6 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IConfig;
-use OCP\Http\Client\IClientService;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IURLGenerator;
@@ -25,7 +24,6 @@ class SettingsController extends Controller {
 		IRequest $request,
 		private IConfig $config,
 		private IUserManager $userManager,
-		private IClientService $clientService,
 		private IURLGenerator $urlGenerator,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -142,30 +140,50 @@ class SettingsController extends Controller {
 			], 400);
 		}
 
-		try {
-			$client = $this->clientService->newClient();
-			$response = $client->post($url, [
-				'headers' => ['Content-Type' => 'application/json'],
-				'body' => '{"probe":true}',
-				'timeout' => 10,
-				'connect_timeout' => 5,
-			]);
+		$parts = parse_url($url);
+		$scheme = strtolower((string)($parts['scheme'] ?? 'https'));
+		$host = (string)($parts['host'] ?? '');
+		$path = (string)($parts['path'] ?? '');
+		$port = (int)($parts['port'] ?? ($scheme === 'http' ? 80 : 443));
 
-			$status = $response->getStatusCode();
-			$ok = $status >= 200 && $status < 500;
-
-			return new JSONResponse([
-				'ok' => $ok,
-				'status' => $status,
-				'message' => $ok
-					? 'Verbindung erreichbar (HTTP ' . $status . ').'
-					: 'Verbindung fehlgeschlagen (HTTP ' . $status . ').',
-			]);
-		} catch (\Throwable $e) {
+		if ($host === '') {
 			return new JSONResponse([
 				'ok' => false,
-				'message' => 'Verbindungstest fehlgeschlagen. Bitte URL/Proxy/TLS pruefen.',
+				'message' => 'Ironclaw URL ist ungueltig (Host fehlt).',
+			], 400);
+		}
+
+		if ($scheme !== 'http' && $scheme !== 'https') {
+			return new JSONResponse([
+				'ok' => false,
+				'message' => 'Nur http/https URLs sind erlaubt.',
+			], 400);
+		}
+
+		$transport = $scheme === 'https' ? 'ssl://' : 'tcp://';
+		$endpoint = $transport . $host . ':' . $port;
+		$errno = 0;
+		$errstr = '';
+
+		$socket = @stream_socket_client($endpoint, $errno, $errstr, 3.0, STREAM_CLIENT_CONNECT);
+		if ($socket === false) {
+			return new JSONResponse([
+				'ok' => false,
+				'message' => 'Verbindung fehlgeschlagen (' . ($errstr !== '' ? $errstr : 'Netzwerkfehler') . ').',
+				'errno' => $errno,
 			], 502);
 		}
+
+		fclose($socket);
+
+		$message = 'Host erreichbar (TCP/TLS ok).';
+		if (str_contains($path, '/webhooks/nextcloud/talk')) {
+			$message = 'Host erreichbar (TCP/TLS ok). Hinweis: Der Webhook verlangt gueltige Signatur-Header.';
+		}
+
+		return new JSONResponse([
+			'ok' => true,
+			'message' => $message,
+		]);
 	}
 }
