@@ -12,6 +12,7 @@ use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\BackgroundJob\IJobList;
+use OCP\ILogger;
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'ironclaw_talk_bridge';
@@ -25,8 +26,15 @@ class Application extends App implements IBootstrap {
 	}
 
 	public function boot(IBootContext $context): void {
-		/** @var IJobList $jobList */
-		$jobList = $context->getServerContainer()->get(IJobList::class);
-		$jobList->add(RetryQueuedEventsJob::class);
+		$context->injectFn(function (IJobList $jobList, ILogger $logger): void {
+			try {
+				$jobList->add(RetryQueuedEventsJob::class);
+			} catch (\Throwable $e) {
+				$logger->error('Failed to register RetryQueuedEventsJob', [
+					'app' => self::APP_ID,
+					'exception' => $e,
+				]);
+			}
+		});
 	}
 }
