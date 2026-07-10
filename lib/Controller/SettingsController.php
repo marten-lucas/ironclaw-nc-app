@@ -15,7 +15,7 @@ use OCP\IUserManager;
 use OCP\IURLGenerator;
 
 class SettingsController extends Controller {
-	private const SETTINGS_SECTION = 'server';
+	private const SETTINGS_SECTION = Application::APP_ID;
 	private const SETTINGS_ANCHOR = '#ironclaw-talk-bridge-admin-settings';
 
 	public function __construct(
