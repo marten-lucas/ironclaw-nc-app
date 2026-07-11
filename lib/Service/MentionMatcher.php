@@ -18,6 +18,10 @@ class MentionMatcher {
 			return true;
 		}
 
+		if ($this->containsExactMentionById($message, $fakeUserId)) {
+			return true;
+		}
+
 		return $this->containsExactMention($message, $displayName);
 	}
 
@@ -50,6 +54,17 @@ class MentionMatcher {
 	private function buildPattern(string $displayName): string {
 		$escaped = preg_quote($displayName, '/');
 		return '/(^|[\s])@' . $escaped . '(?=$|[\s\.,:;!?])/u';
+	}
+
+	private function containsExactMentionById(string $message, string $userId): bool {
+		$userId = trim($userId);
+		if ($userId === '') {
+			return false;
+		}
+
+		$escaped = preg_quote($userId, '/');
+		$pattern = '/(^|[\s])@' . $escaped . '(?=$|[\s\.,:;!?])/iu';
+		return preg_match($pattern, $message) === 1;
 	}
 
 	/**

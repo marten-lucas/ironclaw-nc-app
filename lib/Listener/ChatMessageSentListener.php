@@ -62,13 +62,17 @@ class ChatMessageSentListener implements IEventListener {
 
 		$actorType = (string)($payload['actor']['type'] ?? '');
 		$actorId = (string)($payload['actor']['id'] ?? '');
-		if (!$this->membershipResolver->isEventActorRoomMember($event, $actorType, $actorId)) {
+		$membership = $this->membershipResolver->evaluateEventActorRoomMember($event, $actorType, $actorId);
+		if (!(bool)($membership['isMember'] ?? false)) {
 			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
 			$preview = trim((string)preg_replace('/\s+/u', ' ', $rawMessage));
 			$preview = mb_substr($preview, 0, 200);
-			$this->logger->debug('Membership resolver rejected actor for room: message="' . $preview . '"', [
+			$scope = $isDirectRoom ? 'direct' : 'room';
+			$rejectionReason = (string)($membership['reason'] ?? 'unknown');
+			$this->logger->debug('Membership resolver rejected actor for scope=' . $scope . ' reason=' . $rejectionReason . ': message="' . $preview . '"', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
+				'reason' => $rejectionReason,
 				'actorType' => $actorType,
 				'actorId' => $actorId,
 				'actorDisplayName' => (string)($payload['actor']['displayName'] ?? ''),
