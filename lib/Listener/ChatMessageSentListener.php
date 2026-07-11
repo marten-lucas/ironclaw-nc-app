@@ -66,9 +66,14 @@ class ChatMessageSentListener implements IEventListener {
 			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
 			$this->logger->debug('Membership resolver rejected actor for room', [
 				'app' => 'ironclaw_talk_bridge',
+				'eventId' => $payload['eventId'] ?? null,
 				'actorType' => $actorType,
 				'actorId' => $actorId,
+				'actorDisplayName' => (string)($payload['actor']['displayName'] ?? ''),
 				'roomToken' => $roomToken,
+				'isDirectRoom' => $isDirectRoom,
+				'messageRaw' => mb_substr($rawMessage, 0, 500),
+				'messageParameters' => $messageParameters,
 			]);
 			return;
 		}
