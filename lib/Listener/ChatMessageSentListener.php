@@ -46,6 +46,10 @@ class ChatMessageSentListener implements IEventListener {
 		$payload = $this->mapper->map($event);
 		$roomToken = (string)($payload['roomToken'] ?? '');
 		$rawMessage = (string)($payload['message']['raw'] ?? '');
+		$messageParameters = is_array($payload['message']['parameters'] ?? null)
+			? $payload['message']['parameters']
+			: [];
+		$isDirectRoom = (bool)($payload['room']['isDirect'] ?? false);
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 
 		if (!$this->roomScope->isAllowed($roomToken)) {
@@ -78,16 +82,25 @@ class ChatMessageSentListener implements IEventListener {
 			return;
 		}
 
-		if (!$this->mentionMatcher->containsExactMention($rawMessage, $mentionDisplayName)) {
+		if (!$isDirectRoom && !$this->mentionMatcher->containsMention(
+			$rawMessage,
+			$messageParameters,
+			$mentionDisplayName,
+			$fakeUserId
+		)) {
 			$this->counters->increment(BridgeCounters::KEY_MENTION_MISSES);
 			$this->logger->debug('Mention not matched', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
+				'isDirectRoom' => $isDirectRoom,
 			]);
 			return;
 		}
 
-		$payload['mention'] = ['displayName' => $mentionDisplayName];
+		$payload['mention'] = [
+			'displayName' => $mentionDisplayName,
+			'matchedBy' => $isDirectRoom ? 'direct_room' : 'mention',
+		];
 		$payload['message']['stripped'] = $this->mentionMatcher->stripExactMention($rawMessage, $mentionDisplayName);
 
 		$inserted = $this->outbox->enqueue($payload);

@@ -5,6 +5,22 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\Service;
 
 class MentionMatcher {
+	/**
+	 * @param array<mixed> $messageParameters
+	 */
+	public function containsMention(
+		string $message,
+		array $messageParameters,
+		string $displayName,
+		string $fakeUserId = ''
+	): bool {
+		if ($this->containsMentionInParameters($messageParameters, $displayName, $fakeUserId)) {
+			return true;
+		}
+
+		return $this->containsExactMention($message, $displayName);
+	}
+
 	public function containsExactMention(string $message, string $displayName): bool {
 		$displayName = trim($displayName);
 		if ($displayName === '') {
@@ -34,5 +50,48 @@ class MentionMatcher {
 	private function buildPattern(string $displayName): string {
 		$escaped = preg_quote($displayName, '/');
 		return '/(^|[\s])@' . $escaped . '(?=$|[\s\.,:;!?])/u';
+	}
+
+	/**
+	 * @param array<mixed> $messageParameters
+	 */
+	private function containsMentionInParameters(
+		array $messageParameters,
+		string $displayName,
+		string $fakeUserId
+	): bool {
+		$displayName = trim($displayName);
+		$fakeUserId = trim($fakeUserId);
+
+		foreach ($this->iterMentionCandidates($messageParameters) as $candidate) {
+			$type = strtolower(trim((string)($candidate['type'] ?? '')));
+			if ($type !== '' && !in_array($type, ['user', 'users', 'mention'], true)) {
+				continue;
+			}
+
+			$candidateId = trim((string)($candidate['id'] ?? $candidate['actorId'] ?? ''));
+			$candidateName = trim((string)($candidate['name'] ?? $candidate['label'] ?? $candidate['displayName'] ?? ''));
+
+			if ($fakeUserId !== '' && $candidateId !== '' && strcasecmp($candidateId, $fakeUserId) === 0) {
+				return true;
+			}
+			if ($displayName !== '' && $candidateName !== '' && strcasecmp($candidateName, $displayName) === 0) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * @param array<mixed> $messageParameters
+	 * @return iterable<array<string,mixed>>
+	 */
+	private function iterMentionCandidates(array $messageParameters): iterable {
+		foreach ($messageParameters as $value) {
+			if (is_array($value)) {
+				yield $value;
+			}
+		}
 	}
 }
