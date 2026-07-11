@@ -50,6 +50,11 @@ class ChatMessageSentListener implements IEventListener {
 			? $payload['message']['parameters']
 			: [];
 		$isDirectRoom = (bool)($payload['room']['isDirect'] ?? false);
+		$roomDetectionMethod = (string)($payload['room']['detectionMethod'] ?? 'unknown');
+		$roomParticipantCount = (int)($payload['room']['participantCount'] ?? 0);
+		$roomParticipantActors = is_array($payload['room']['participantActors'] ?? null)
+			? $payload['room']['participantActors']
+			: [];
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 
 		if (!$this->roomScope->isAllowed($roomToken)) {
@@ -62,26 +67,30 @@ class ChatMessageSentListener implements IEventListener {
 
 		$actorType = (string)($payload['actor']['type'] ?? '');
 		$actorId = (string)($payload['actor']['id'] ?? '');
-		$membership = $this->membershipResolver->evaluateEventActorRoomMember($event, $actorType, $actorId);
-		if (!(bool)($membership['isMember'] ?? false)) {
-			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
-			$preview = trim((string)preg_replace('/\s+/u', ' ', $rawMessage));
-			$preview = mb_substr($preview, 0, 200);
-			$scope = $isDirectRoom ? 'direct' : 'room';
-			$rejectionReason = (string)($membership['reason'] ?? 'unknown');
-			$this->logger->debug('Membership resolver rejected actor for scope=' . $scope . ' reason=' . $rejectionReason . ': message="' . $preview . '"', [
-				'app' => 'ironclaw_talk_bridge',
-				'eventId' => $payload['eventId'] ?? null,
-				'reason' => $rejectionReason,
-				'actorType' => $actorType,
-				'actorId' => $actorId,
-				'actorDisplayName' => (string)($payload['actor']['displayName'] ?? ''),
-				'roomToken' => $roomToken,
-				'isDirectRoom' => $isDirectRoom,
-				'messageRaw' => mb_substr($rawMessage, 0, 500),
-				'messageParameters' => $messageParameters,
-			]);
-			return;
+		if (!$isDirectRoom) {
+			$membership = $this->membershipResolver->evaluateEventActorRoomMember($event, $actorType, $actorId);
+			if (!(bool)($membership['isMember'] ?? false)) {
+				$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
+				$preview = trim((string)preg_replace('/\s+/u', ' ', $rawMessage));
+				$preview = mb_substr($preview, 0, 200);
+				$rejectionReason = (string)($membership['reason'] ?? 'unknown');
+				$this->logger->debug('Membership resolver rejected actor for scope=room reason=' . $rejectionReason . ': message="' . $preview . '"', [
+					'app' => 'ironclaw_talk_bridge',
+					'eventId' => $payload['eventId'] ?? null,
+					'reason' => $rejectionReason,
+					'actorType' => $actorType,
+					'actorId' => $actorId,
+					'actorDisplayName' => (string)($payload['actor']['displayName'] ?? ''),
+					'roomToken' => $roomToken,
+					'isDirectRoom' => $isDirectRoom,
+					'roomDetectionMethod' => $roomDetectionMethod,
+					'roomParticipantCount' => $roomParticipantCount,
+					'roomParticipantActors' => $roomParticipantActors,
+					'messageRaw' => mb_substr($rawMessage, 0, 500),
+					'messageParameters' => $messageParameters,
+				]);
+				return;
+			}
 		}
 
 		$fakeUserId = $this->config->getFakeUserId();
