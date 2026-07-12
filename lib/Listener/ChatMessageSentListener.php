@@ -74,13 +74,22 @@ class ChatMessageSentListener implements IEventListener {
 			: [];
 		$participantDataSource = 'event_payload';
 		if ($roomParticipantActors === [] || $roomParticipantCount === 0) {
-			$dbSnapshot = $this->roomParticipantsResolver->resolveByRoomToken($roomToken);
-			if (($dbSnapshot['participantActors'] ?? []) !== []) {
-				$roomParticipantActors = is_array($dbSnapshot['participantActors'])
-					? $dbSnapshot['participantActors']
-					: [];
-				$roomParticipantCount = (int)($dbSnapshot['participantCount'] ?? count($roomParticipantActors));
-				$participantDataSource = (string)($dbSnapshot['dataSource'] ?? 'db_unknown');
+			try {
+				$dbSnapshot = $this->roomParticipantsResolver->resolveByRoomToken($roomToken);
+				if (($dbSnapshot['participantActors'] ?? []) !== []) {
+					$roomParticipantActors = is_array($dbSnapshot['participantActors'])
+						? $dbSnapshot['participantActors']
+						: [];
+					$roomParticipantCount = (int)($dbSnapshot['participantCount'] ?? count($roomParticipantActors));
+					$participantDataSource = (string)($dbSnapshot['dataSource'] ?? 'db_unknown');
+				}
+			} catch (\Throwable $e) {
+				$participantDataSource = 'db_lookup_exception';
+				$this->logger->debug('Participant lookup crashed, falling back to event payload', [
+					'app' => 'ironclaw_talk_bridge',
+					'roomToken' => $roomToken,
+					'error' => $e->getMessage(),
+				]);
 			}
 		}
 		$mentionDisplayName = $this->config->getMentionDisplayName();

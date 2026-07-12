@@ -36,7 +36,7 @@ class TalkRoomParticipantsResolver {
 		try {
 			$result = $query->executeQuery();
 			$actors = [];
-			while (($row = $result->fetchAssociative()) !== false) {
+			foreach ($this->fetchRows($result) as $row) {
 				$actorType = isset($row['actor_type']) ? trim((string)$row['actor_type']) : '';
 				$actorId = isset($row['actor_id']) ? trim((string)$row['actor_id']) : '';
 				if ($actorType === '' || $actorId === '') {
@@ -44,7 +44,9 @@ class TalkRoomParticipantsResolver {
 				}
 				$actors[$actorType . ':' . $actorId] = true;
 			}
-			$result->closeCursor();
+			if (method_exists($result, 'closeCursor')) {
+				$result->closeCursor();
+			}
 
 			$participantActors = array_values(array_keys($actors));
 			return [
@@ -64,5 +66,40 @@ class TalkRoomParticipantsResolver {
 				'dataSource' => 'db_lookup_failed',
 			];
 		}
+	}
+
+	/**
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function fetchRows(object $result): array {
+		if (method_exists($result, 'fetchAllAssociative')) {
+			$rows = $result->fetchAllAssociative();
+			return is_array($rows) ? $rows : [];
+		}
+
+		if (method_exists($result, 'fetchAll')) {
+			$rows = $result->fetchAll();
+			return is_array($rows) ? $rows : [];
+		}
+
+		$rows = [];
+		if (method_exists($result, 'fetchAssociative')) {
+			while (($row = $result->fetchAssociative()) !== false) {
+				if (is_array($row)) {
+					$rows[] = $row;
+				}
+			}
+			return $rows;
+		}
+
+		if (method_exists($result, 'fetch')) {
+			while (($row = $result->fetch()) !== false) {
+				if (is_array($row)) {
+					$rows[] = $row;
+				}
+			}
+		}
+
+		return $rows;
 	}
 }
