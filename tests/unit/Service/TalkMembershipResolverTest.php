@@ -31,6 +31,13 @@ class TalkMembershipResolverTest extends TestCase {
 		self::assertTrue($resolver->isEventActorRoomMember($event, 'users', 'alice'));
 	}
 
+	public function testAllowsActorIdentityWhenNoResolverSeamExists(): void {
+		$resolver = new TalkMembershipResolver($this->buildConfig(true), $this->buildLogger());
+		$event = new FakeChatMessageSentEvent(null);
+
+		self::assertTrue($resolver->isEventActorRoomMember($event, 'users', 'alice'));
+	}
+
 	public function testAcceptsMatchingActorFromRoomParticipantSnapshot(): void {
 		$resolver = new TalkMembershipResolver($this->buildConfig(true), $this->buildLogger());
 		$room = new class {

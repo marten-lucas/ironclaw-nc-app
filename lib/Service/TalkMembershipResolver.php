@@ -47,7 +47,11 @@ class TalkMembershipResolver {
 
 		$room = $event->getRoom();
 
+		$hasResolverSeam = false;
+		$lastResolverReason = 'no_resolver_seam';
+
 		if (method_exists($room, 'getParticipantByActor')) {
+			$hasResolverSeam = true;
 			try {
 				$value = $room->getParticipantByActor($actorType, $actorId);
 				if (is_object($value)) {
@@ -56,7 +60,7 @@ class TalkMembershipResolver {
 				if ($participantMismatch) {
 					return ['isMember' => false, 'reason' => 'participant_mismatch_and_getParticipantByActor_empty'];
 				}
-				return ['isMember' => false, 'reason' => 'getParticipantByActor_empty'];
+				$lastResolverReason = 'getParticipantByActor_empty';
 			} catch (\Throwable $e) {
 				$this->logger->debug('Talk getParticipantByActor failed in membership resolver', [
 					'app' => 'ironclaw_talk_bridge',
@@ -65,11 +69,12 @@ class TalkMembershipResolver {
 				if ($participantMismatch) {
 					return ['isMember' => false, 'reason' => 'participant_mismatch_and_getParticipantByActor_exception'];
 				}
-				return ['isMember' => false, 'reason' => 'getParticipantByActor_exception'];
+				$lastResolverReason = 'getParticipantByActor_exception';
 			}
 		}
 
 		if (method_exists($room, 'hasParticipant')) {
+			$hasResolverSeam = true;
 			try {
 				if ((bool)$room->hasParticipant($actorType, $actorId)) {
 					return ['isMember' => true, 'reason' => 'room_has_participant_match'];
@@ -77,7 +82,7 @@ class TalkMembershipResolver {
 				if ($participantMismatch) {
 					return ['isMember' => false, 'reason' => 'participant_mismatch_and_hasParticipant_false'];
 				}
-				return ['isMember' => false, 'reason' => 'hasParticipant_false'];
+				$lastResolverReason = 'hasParticipant_false';
 			} catch (\Throwable $e) {
 				$this->logger->debug('Talk hasParticipant failed in membership resolver', [
 					'app' => 'ironclaw_talk_bridge',
@@ -86,7 +91,7 @@ class TalkMembershipResolver {
 				if ($participantMismatch) {
 					return ['isMember' => false, 'reason' => 'participant_mismatch_and_hasParticipant_exception'];
 				}
-				return ['isMember' => false, 'reason' => 'hasParticipant_exception'];
+				$lastResolverReason = 'hasParticipant_exception';
 			}
 		}
 
@@ -102,11 +107,18 @@ class TalkMembershipResolver {
 			return ['isMember' => false, 'reason' => 'snapshot_missing_actor'];
 		}
 
-		// Fail closed in strict mode when no stable resolver seam is available.
+		// Strong mismatch signals still fail closed in strict mode.
 		if ($participantMismatch) {
 			return ['isMember' => false, 'reason' => 'participant_mismatch_no_resolver_seam'];
 		}
-		return ['isMember' => false, 'reason' => 'no_resolver_seam'];
+
+		// For server-side Talk chat events with actor identity but without resolver seams,
+		// avoid false negatives that would block all inbound messages on some Talk versions.
+		if (!$hasResolverSeam) {
+			return ['isMember' => true, 'reason' => 'actor_identity_fallback_no_resolver_seam'];
+		}
+
+		return ['isMember' => false, 'reason' => $lastResolverReason];
 	}
 
 	/**
