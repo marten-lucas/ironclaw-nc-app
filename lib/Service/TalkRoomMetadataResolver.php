@@ -7,6 +7,7 @@ namespace OCA\IronclawTalkBridge\Service;
 use OCP\DB\Exception as DbException;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
 class TalkRoomMetadataResolver {
@@ -18,6 +19,7 @@ class TalkRoomMetadataResolver {
 
 	public function __construct(
 		ICacheFactory $cacheFactory,
+		private IDBConnection $db,
 		private AppConfig $config,
 		private LoggerInterface $logger,
 	) {
@@ -25,7 +27,7 @@ class TalkRoomMetadataResolver {
 	}
 
 	/**
-	 * @return array{roomType:string,botPresent:bool,source:string,attempts:int}
+	 * @return array{roomType:string,botPresent:bool,participantCount:int|null,source:string,attempts:int}
 	 */
 	public function resolve(object $room, string $botUserId): array {
 		$roomToken = $this->roomToken($room);
@@ -36,18 +38,22 @@ class TalkRoomMetadataResolver {
 		while ($attempt < self::MAX_ATTEMPTS) {
 			$attempt++;
 			try {
-				$roomType = $this->normalizeRoomType($this->fetchRawRoomType($room), $room);
-				$botPresent = $this->fetchBotPresence($room, $botUserId);
+				$dbData = $this->fetchRoomDataFromDb($room, $botUserId);
+				$roomType = $dbData['roomType'];
+				$botPresent = $dbData['botPresent'];
+				$participantCount = $dbData['participantCount'];
 
 				$data = [
 					'roomType' => $roomType,
 					'botPresent' => $botPresent,
+					'participantCount' => $participantCount,
 					'source' => $attempt === 1 ? 'live' : 'live_retry',
 					'attempts' => $attempt,
 				];
 				$this->cache->set($cacheKey, [
 					'roomType' => $roomType,
 					'botPresent' => $botPresent,
+					'participantCount' => $participantCount,
 					'cachedAt' => time(),
 				], self::CACHE_TTL_SECONDS);
 				$this->logger->debug('Room metadata cache updated roomToken=' . $roomToken
@@ -104,116 +110,89 @@ class TalkRoomMetadataResolver {
 		return [
 			'roomType' => RoomForwardingPolicy::ROOM_TYPE_UNKNOWN,
 			'botPresent' => false,
+			'participantCount' => null,
 			'source' => 'unknown',
 			'attempts' => $attempt,
 		];
 	}
 
-	private function fetchRawRoomType(object $room): mixed {
-		if (method_exists($room, 'isOneToOne')) {
-			try {
-				if ((bool)$room->isOneToOne()) {
-					return RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE;
-				}
-			} catch (\Throwable) {
-			}
+	/**
+	 * @return array{roomType:string,botPresent:bool,participantCount:int}
+	 */
+	private function fetchRoomDataFromDb(object $room, string $botUserId): array {
+		$roomToken = $this->roomToken($room);
+		if ($roomToken === '') {
+			throw new \RuntimeException('Room token is missing');
 		}
 
-		foreach (['getType', 'getConversationType', 'getRoomType'] as $method) {
-			if (!method_exists($room, $method)) {
+		$botUserId = trim($botUserId);
+		$mentionDisplayName = trim($this->config->getMentionDisplayName());
+
+		$query = $this->db->getQueryBuilder();
+		$query->select('a.actor_type', 'a.actor_id')
+			->from('talk_attendees', 'a')
+			->innerJoin('a', 'talk_rooms', 'r', $query->expr()->eq('a.room_id', 'r.id'))
+			->where($query->expr()->eq('r.token', $query->createNamedParameter($roomToken)));
+
+		$result = $query->executeQuery();
+		$participantCount = 0;
+		$botPresent = false;
+		$sample = [];
+
+		while (($row = method_exists($result, 'fetchAssociative') ? $result->fetchAssociative() : $result->fetch()) !== false) {
+			if (!is_array($row)) {
 				continue;
 			}
 
-			return $room->{$method}();
-		}
+			$actorType = isset($row['actor_type']) ? trim((string)$row['actor_type']) : '';
+			$actorId = isset($row['actor_id']) ? trim((string)$row['actor_id']) : '';
+			if ($actorType === '' || $actorId === '') {
+				continue;
+			}
 
-		return null;
-	}
+			$participantCount++;
+			if (count($sample) < 10) {
+				$sample[] = ['actorType' => $actorType, 'actorId' => $actorId];
+			}
 
-	private function fetchBotPresence(object $room, string $botUserId): bool {
-		$botUserId = trim($botUserId);
-		if ($botUserId === '') {
-			return false;
-		}
-		$mentionDisplayName = trim($this->config->getMentionDisplayName());
+			if ($botUserId !== '' && in_array(strtolower($actorType), ['users', 'user'], true)
+				&& strcasecmp($actorId, $botUserId) === 0) {
+				$botPresent = true;
+			}
 
-		if (method_exists($room, 'hasParticipant')) {
-			foreach ([
-				['users', $botUserId],
-				['user', $botUserId],
-				[$botUserId],
-			] as $args) {
-				try {
-					if ((bool)$room->hasParticipant(...$args)) {
-						return true;
-					}
-				} catch (\ArgumentCountError | \TypeError) {
-					continue;
-				}
+			if (!$botPresent && $mentionDisplayName !== '' && strcasecmp($actorId, $mentionDisplayName) === 0) {
+				$botPresent = true;
 			}
 		}
 
-		if (method_exists($room, 'getParticipantByActor')) {
-			foreach (['users', 'user'] as $actorType) {
-				try {
-					$value = $room->getParticipantByActor($actorType, $botUserId);
-					if ($value !== null) {
-						return true;
-					}
-				} catch (\ArgumentCountError | \TypeError) {
-					continue;
-				}
-			}
+		if (method_exists($result, 'closeCursor')) {
+			$result->closeCursor();
 		}
 
-		$participants = $this->collectRoomParticipants($room);
-		if ($participants !== []) {
-			$botUserIdLower = strtolower($botUserId);
-			$mentionDisplayNameLower = strtolower($mentionDisplayName);
-			foreach ($participants as $participant) {
-				$actorType = strtolower((string)($participant['actorType'] ?? ''));
-				$actorId = strtolower((string)($participant['actorId'] ?? ''));
-				$uid = strtolower((string)($participant['uid'] ?? ''));
-				$userId = strtolower((string)($participant['userId'] ?? ''));
-				$id = strtolower((string)($participant['id'] ?? ''));
-				$displayName = strtolower((string)($participant['displayName'] ?? ''));
+		$roomType = $participantCount <= 2
+			? RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE
+			: RoomForwardingPolicy::ROOM_TYPE_GROUP;
 
-				if ($actorId !== '' && $actorId === $botUserIdLower) {
-					return true;
-				}
-				if ($uid !== '' && $uid === $botUserIdLower) {
-					return true;
-				}
-				if ($userId !== '' && $userId === $botUserIdLower) {
-					return true;
-				}
-				if ($id !== '' && $id === $botUserIdLower) {
-					return true;
-				}
-				if ($mentionDisplayNameLower !== '' && $displayName !== '' && $displayName === $mentionDisplayNameLower) {
-					return true;
-				}
-
-				if (in_array($actorType, ['users', 'user'], true)
-					&& in_array($actorId, [$botUserIdLower], true)) {
-					return true;
-				}
-			}
-
-			$this->logger->debug('Configured user presence unresolved from room snapshot', [
+		if (!$botPresent) {
+			$this->logger->debug('Configured user presence unresolved from DB attendees', [
 				'app' => 'ironclaw_talk_bridge',
-				'botUserId' => $botUserId,
+				'roomToken' => $roomToken,
+				'fakeUserId' => $botUserId,
 				'mentionDisplayName' => $mentionDisplayName,
-				'participantCount' => count($participants),
-				'participantSample' => array_slice($participants, 0, 10),
+				'participantCount' => $participantCount,
+				'participantSample' => $sample,
 			]);
 		}
 
-		return false;
+		return [
+			'roomType' => $roomType,
+			'botPresent' => $botPresent,
+			'participantCount' => $participantCount,
+		];
 	}
 
 	/**
-	 * @return array{roomType:string,botPresent:bool}|null
+	 * @return array{roomType:string,botPresent:bool,participantCount:int|null}|null
 	 */
 	private function readCache(string $cacheKey): ?array {
 		$cached = $this->cache->get($cacheKey);
@@ -229,6 +208,7 @@ class TalkRoomMetadataResolver {
 		return [
 			'roomType' => $roomType,
 			'botPresent' => (bool)($cached['botPresent'] ?? false),
+			'participantCount' => isset($cached['participantCount']) ? (int)$cached['participantCount'] : null,
 		];
 	}
 
@@ -260,202 +240,4 @@ class TalkRoomMetadataResolver {
 			|| str_contains($message, 'deadlock');
 	}
 
-	private function normalizeRoomType(mixed $rawType, object $room): string {
-		if (is_string($rawType)) {
-			$normalized = strtolower(trim($rawType));
-			if (in_array($normalized, ['direct', 'one_to_one', 'one-to-one', 'one2one', 'single'], true)) {
-				return RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE;
-			}
-			if (in_array($normalized, ['group'], true)) {
-				return RoomForwardingPolicy::ROOM_TYPE_GROUP;
-			}
-			if (in_array($normalized, ['public'], true)) {
-				return RoomForwardingPolicy::ROOM_TYPE_PUBLIC;
-			}
-		}
-
-		if (is_int($rawType)) {
-			$constantMap = $this->roomTypeConstantMap($room);
-			if (isset($constantMap[$rawType])) {
-				return $constantMap[$rawType];
-			}
-
-			if ($rawType === 1) {
-				return RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE;
-			}
-			if ($rawType === 2) {
-				return RoomForwardingPolicy::ROOM_TYPE_GROUP;
-			}
-			if ($rawType === 3) {
-				return RoomForwardingPolicy::ROOM_TYPE_PUBLIC;
-			}
-		}
-
-		return RoomForwardingPolicy::ROOM_TYPE_UNKNOWN;
-	}
-
-	/**
-	 * @return array<int,string>
-	 */
-	private function roomTypeConstantMap(object $room): array {
-		try {
-			$reflection = new \ReflectionClass($room);
-			$constants = $reflection->getConstants();
-		} catch (\ReflectionException) {
-			return [];
-		}
-
-		$map = [];
-		$aliases = [
-			'TYPE_ONE_TO_ONE' => RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE,
-			'TYPE_GROUP' => RoomForwardingPolicy::ROOM_TYPE_GROUP,
-			'TYPE_PUBLIC' => RoomForwardingPolicy::ROOM_TYPE_PUBLIC,
-		];
-
-		foreach ($aliases as $constantName => $normalizedType) {
-			$value = $constants[$constantName] ?? null;
-			if (is_int($value)) {
-				$map[$value] = $normalizedType;
-			}
-		}
-
-		return $map;
-	}
-
-	/**
-	 * @return array<int,array{actorType:string,actorId:string,uid:string,userId:string,id:string,displayName:string}>
-	 */
-	private function collectRoomParticipants(object $room): array {
-		$participants = [];
-		foreach (['getParticipants', 'getAttendees'] as $method) {
-			if (!method_exists($room, $method)) {
-				continue;
-			}
-
-			try {
-				$value = $room->{$method}();
-				if (!is_iterable($value)) {
-					continue;
-				}
-
-				foreach ($value as $participant) {
-					$identity = $this->participantIdentity($participant);
-					if ($identity !== null) {
-						$fingerprint = strtolower(implode('|', [
-							$identity['actorType'],
-							$identity['actorId'],
-							$identity['uid'],
-							$identity['userId'],
-							$identity['id'],
-							$identity['displayName'],
-						]));
-						$participants[$fingerprint] = $identity;
-					}
-				}
-			} catch (\Throwable) {
-			}
-		}
-
-		return array_values($participants);
-	}
-
-	/**
-	 * @return array{actorType:string,actorId:string,uid:string,userId:string,id:string,displayName:string}|null
-	 */
-	private function participantIdentity(mixed $participant): ?array {
-		$actorType = null;
-		$actorId = null;
-		$uid = null;
-		$userId = null;
-		$id = null;
-		$displayName = null;
-
-		if (is_array($participant)) {
-			$actorType = isset($participant['actorType']) ? (string)$participant['actorType'] : null;
-			$actorId = isset($participant['actorId']) ? (string)$participant['actorId'] : null;
-			$uid = isset($participant['uid']) ? (string)$participant['uid'] : null;
-			$userId = isset($participant['userId']) ? (string)$participant['userId'] : null;
-			$id = isset($participant['id']) ? (string)$participant['id'] : null;
-			$displayName = isset($participant['displayName']) ? (string)$participant['displayName'] : null;
-		} elseif (is_object($participant)) {
-			if (method_exists($participant, 'getAttendee')) {
-				try {
-					$attendee = $participant->getAttendee();
-					if (is_object($attendee)) {
-						$participant = $attendee;
-					}
-				} catch (\Throwable) {
-				}
-			}
-
-			if (method_exists($participant, 'getActorType')) {
-				try {
-					$actorType = (string)$participant->getActorType();
-				} catch (\Throwable) {
-				}
-			}
-
-			if (method_exists($participant, 'getActorId')) {
-				try {
-					$actorId = (string)$participant->getActorId();
-				} catch (\Throwable) {
-				}
-			}
-
-			if (method_exists($participant, 'getUID')) {
-				try {
-					$uid = (string)$participant->getUID();
-				} catch (\Throwable) {
-				}
-			}
-
-			if (method_exists($participant, 'getUserId')) {
-				try {
-					$userId = (string)$participant->getUserId();
-				} catch (\Throwable) {
-				}
-			}
-
-			if (method_exists($participant, 'getId')) {
-				try {
-					$id = (string)$participant->getId();
-				} catch (\Throwable) {
-				}
-			}
-
-			if (method_exists($participant, 'getDisplayName')) {
-				try {
-					$displayName = (string)$participant->getDisplayName();
-				} catch (\Throwable) {
-				}
-			}
-
-			if ($displayName === null && method_exists($participant, 'getActorDisplayName')) {
-				try {
-					$displayName = (string)$participant->getActorDisplayName();
-				} catch (\Throwable) {
-				}
-			}
-		}
-
-		$actorType = is_string($actorType) ? trim($actorType) : '';
-		$actorId = is_string($actorId) ? trim($actorId) : '';
-		$uid = is_string($uid) ? trim($uid) : '';
-		$userId = is_string($userId) ? trim($userId) : '';
-		$id = is_string($id) ? trim($id) : '';
-		$displayName = is_string($displayName) ? trim($displayName) : '';
-
-		if ($actorType === '' && $actorId === '' && $uid === '' && $userId === '' && $id === '' && $displayName === '') {
-			return null;
-		}
-
-		return [
-			'actorType' => $actorType,
-			'actorId' => $actorId,
-			'uid' => $uid,
-			'userId' => $userId,
-			'id' => $id,
-			'displayName' => $displayName,
-		];
-	}
 }
