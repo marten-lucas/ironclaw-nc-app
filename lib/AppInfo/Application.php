@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace OCA\IronclawTalkBridge\AppInfo;
 
-use OCA\IronclawTalkBridge\BackgroundJob\RefreshParticipantSnapshotsJob;
 use OCA\IronclawTalkBridge\BackgroundJob\RetryQueuedEventsJob;
 use OCA\IronclawTalkBridge\Listener\ChatMessageSentListener;
 use OCA\Talk\Events\ChatMessageSentEvent;
@@ -30,7 +29,6 @@ class Application extends App implements IBootstrap {
 			/** @var IJobList $jobList */
 			$jobList = $context->getServerContainer()->get(IJobList::class);
 			$jobList->add(RetryQueuedEventsJob::class);
-			$jobList->add(RefreshParticipantSnapshotsJob::class);
 		} catch (\Throwable $e) {
 			\OC::$server->getLogger()->error('Failed to register RetryQueuedEventsJob', [
 				'app' => self::APP_ID,

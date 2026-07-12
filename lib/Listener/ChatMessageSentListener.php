@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace OCA\IronclawTalkBridge\Listener;
 
-use OCA\IronclawTalkBridge\Db\RoomParticipantsSnapshotRepository;
 use OCA\IronclawTalkBridge\Db\OutboxRepository;
 use OCA\IronclawTalkBridge\Service\AppConfig;
 use OCA\IronclawTalkBridge\Service\BridgeCounters;
 use OCA\IronclawTalkBridge\Service\MentionMatcher;
 use OCA\IronclawTalkBridge\Service\OutboxDispatcher;
 use OCA\IronclawTalkBridge\Service\RoomForwardingPolicy;
+use OCA\IronclawTalkBridge\Service\TalkRoomMetadataResolver;
 use OCA\IronclawTalkBridge\Service\RoomScopeService;
 use OCA\IronclawTalkBridge\Service\TalkMembershipResolver;
 use OCA\IronclawTalkBridge\Service\TalkEventMapper;
@@ -29,7 +29,7 @@ class ChatMessageSentListener implements IEventListener {
 		private MentionMatcher $mentionMatcher,
 		private RoomScopeService $roomScope,
 		private TalkMembershipResolver $membershipResolver,
-		private RoomParticipantsSnapshotRepository $participantSnapshots,
+		private TalkRoomMetadataResolver $roomMetadataResolver,
 		private RoomForwardingPolicy $forwardingPolicy,
 		private OutboxRepository $outbox,
 		private OutboxDispatcher $dispatcher,
@@ -66,27 +66,6 @@ class ChatMessageSentListener implements IEventListener {
 		$messageParameters = is_array($payload['message']['parameters'] ?? null)
 			? $payload['message']['parameters']
 			: [];
-		$isDirectRoom = (bool)($payload['room']['isDirect'] ?? false);
-		$roomDetectionMethod = (string)($payload['room']['detectionMethod'] ?? 'unknown');
-		$roomParticipantCount = (int)($payload['room']['participantCount'] ?? 0);
-		$roomParticipantActors = is_array($payload['room']['participantActors'] ?? null)
-			? $payload['room']['participantActors']
-			: [];
-		$participantDataSource = 'event_payload';
-		if ($roomParticipantActors === [] || $roomParticipantCount === 0) {
-			$snapshot = $this->participantSnapshots->getByRoomToken($roomToken);
-			if (is_array($snapshot)) {
-				$snapshotActors = is_array($snapshot['participantActors'] ?? null)
-					? $snapshot['participantActors']
-					: [];
-				$snapshotCount = (int)($snapshot['participantCount'] ?? 0);
-				if ($snapshotActors !== [] || $snapshotCount > 0) {
-					$roomParticipantActors = $snapshotActors;
-					$roomParticipantCount = $snapshotCount > 0 ? $snapshotCount : count($snapshotActors);
-					$participantDataSource = 'snapshot_cache';
-				}
-			}
-		}
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 
 		if (!$this->roomScope->isAllowed($roomToken)) {
@@ -111,10 +90,6 @@ class ChatMessageSentListener implements IEventListener {
 				'actorId' => $actorId,
 				'actorDisplayName' => (string)($payload['actor']['displayName'] ?? ''),
 				'roomToken' => $roomToken,
-				'isDirectRoom' => $isDirectRoom,
-				'roomDetectionMethod' => $roomDetectionMethod,
-				'roomParticipantCount' => $roomParticipantCount,
-				'roomParticipantActors' => $roomParticipantActors,
 				'messageRaw' => mb_substr($rawMessage, 0, 500),
 				'messageParameters' => $messageParameters,
 			]);
@@ -122,31 +97,41 @@ class ChatMessageSentListener implements IEventListener {
 		}
 
 		$fakeUserId = $this->config->getFakeUserId();
-		$fakeUserInRoom = true;
-		$fakeMembershipReason = 'fake_user_not_configured';
-		if ($fakeUserId !== '') {
-			$fakeMembership = $this->membershipResolver->evaluateEventActorRoomMember($event, 'users', $fakeUserId);
-			$fakeMembershipReason = (string)($fakeMembership['reason'] ?? 'unknown');
-			$fakeMembershipByResolver = (bool)($fakeMembership['isMember'] ?? false);
-			if ($roomParticipantActors !== []) {
-				$fakeUserInRoom = in_array('users:' . $fakeUserId, $roomParticipantActors, true)
-					|| $fakeMembershipByResolver;
-			} else {
-				$fakeUserInRoom = $fakeMembershipByResolver;
-			}
+		if ($fakeUserId === '') {
+			$this->logger->debug('Routing skipped because fake user id is not configured', [
+				'app' => 'ironclaw_talk_bridge',
+				'eventId' => $payload['eventId'] ?? null,
+				'roomToken' => $roomToken,
+			]);
+			return;
+		}
 
-			if (!$fakeUserInRoom) {
-				$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
-				$this->logger->debug('Room does not contain configured fake user', [
-					'app' => 'ironclaw_talk_bridge',
-					'eventId' => $payload['eventId'] ?? null,
-					'roomToken' => $roomToken,
-					'fakeUserId' => $fakeUserId,
-					'fakeMembershipReason' => $fakeMembershipReason,
-					'roomParticipantActors' => $roomParticipantActors,
-				]);
-				return;
-			}
+		try {
+			$roomMetadata = $this->roomMetadataResolver->resolve($event->getRoom(), $fakeUserId);
+		} catch (\Exception $e) {
+			$this->logger->warning('Routing skipped because room metadata could not be resolved', [
+				'app' => 'ironclaw_talk_bridge',
+				'eventId' => $payload['eventId'] ?? null,
+				'roomToken' => $roomToken,
+				'error' => $e->getMessage(),
+			]);
+			return;
+		}
+		$roomType = (string)($roomMetadata['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN);
+		$roomMetadataSource = (string)($roomMetadata['source'] ?? 'unknown');
+		$fakeUserInRoom = (bool)($roomMetadata['botPresent'] ?? false);
+
+		if (!$fakeUserInRoom) {
+			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
+			$this->logger->debug('Room does not contain configured fake user', [
+				'app' => 'ironclaw_talk_bridge',
+				'eventId' => $payload['eventId'] ?? null,
+				'roomToken' => $roomToken,
+				'fakeUserId' => $fakeUserId,
+				'roomType' => $roomType,
+				'roomMetadataSource' => $roomMetadataSource,
+			]);
+			return;
 		}
 
 		if ($fakeUserId !== '' && $actorType === 'users' && $actorId === $fakeUserId) {
@@ -158,39 +143,23 @@ class ChatMessageSentListener implements IEventListener {
 		}
 
 		$forwardingDecision = $this->forwardingPolicy->decide(
-			$fakeUserId,
-			$roomParticipantActors,
-			$roomParticipantCount,
-			$fakeUserInRoom
+			$roomType
 		);
-		if ($fakeUserId !== ''
-			&& $fakeUserInRoom
-			&& $actorType === 'users'
-			&& $actorId !== $fakeUserId
-			&& (int)($forwardingDecision['otherParticipantCount'] ?? 0) === 0
-		) {
-			$forwardingDecision = [
-				'requiresMention' => false,
-				'otherParticipantCount' => 1,
-				'matchedBy' => 'actor_plus_fakeuser_fallback',
-			];
-		}
 		$requiresMention = (bool)($forwardingDecision['requiresMention'] ?? true);
 		$this->logger->debug('Forwarding decision computed requiresMention=' . ($requiresMention ? 'true' : 'false')
-			. ' otherParticipants=' . (string)((int)($forwardingDecision['otherParticipantCount'] ?? 0))
 			. ' matchedBy=' . (string)($forwardingDecision['matchedBy'] ?? 'mention')
-			. ' participantsSource=' . $participantDataSource
+			. ' roomType=' . $roomType
+			. ' roomMetadataSource=' . $roomMetadataSource
 			. ' message="' . $messagePreview . '"', [
 			'app' => 'ironclaw_talk_bridge',
 			'eventId' => $payload['eventId'] ?? null,
 			'roomToken' => $roomToken,
 			'requiresMention' => $requiresMention,
 			'matchedByCandidate' => (string)($forwardingDecision['matchedBy'] ?? 'mention'),
-			'otherParticipantCount' => (int)($forwardingDecision['otherParticipantCount'] ?? 0),
+			'roomType' => $roomType,
 			'fakeUserId' => $fakeUserId,
 			'fakeUserInRoom' => $fakeUserInRoom,
-			'fakeMembershipReason' => $fakeMembershipReason,
-			'participantDataSource' => $participantDataSource,
+			'roomMetadataSource' => $roomMetadataSource,
 		]);
 
 		if ($requiresMention && !$this->mentionMatcher->containsMention(
@@ -200,19 +169,19 @@ class ChatMessageSentListener implements IEventListener {
 			$fakeUserId
 		)) {
 			$this->counters->increment(BridgeCounters::KEY_MENTION_MISSES);
-			$this->logger->debug('Forwarding denied reason=mention_required_missing otherParticipants='
-				. (string)((int)($forwardingDecision['otherParticipantCount'] ?? 0))
-				. ' message="' . $messagePreview . '"', [
+			$this->logger->debug('Forwarding denied reason=mention_required_missing message="' . $messagePreview . '"', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
-				'isDirectRoom' => $isDirectRoom,
-				'otherParticipantCount' => $forwardingDecision['otherParticipantCount'] ?? 0,
+				'roomType' => $roomType,
 				'mentionDisplayName' => $mentionDisplayName,
 				'fakeUserId' => $fakeUserId,
 			]);
 			return;
 		}
 
+		$payload['room']['type'] = $roomType;
+		$payload['room']['detectionMethod'] = (string)($roomMetadata['source'] ?? 'unknown');
+		$payload['room']['botPresent'] = $fakeUserInRoom;
 		$payload['mention'] = [
 			'displayName' => $mentionDisplayName,
 			'matchedBy' => (string)($forwardingDecision['matchedBy'] ?? 'mention'),
@@ -223,12 +192,12 @@ class ChatMessageSentListener implements IEventListener {
 		if ($inserted) {
 			$this->counters->increment(BridgeCounters::KEY_EVENTS_ENQUEUED);
 			$this->logger->info('Forwarding allowed reason=' . (string)($payload['mention']['matchedBy'] ?? 'unknown')
-				. ' otherParticipants=' . (string)((int)($forwardingDecision['otherParticipantCount'] ?? 0))
+				. ' roomType=' . $roomType
 				. ' message="' . $messagePreview . '"', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
 				'roomToken' => $roomToken,
-				'otherParticipantCount' => (int)($forwardingDecision['otherParticipantCount'] ?? 0),
+				'roomType' => $roomType,
 			]);
 			$this->logger->debug('Immediate dispatch skipped to avoid dirty table reads; queued event will be delivered by background job', [
 				'app' => 'ironclaw_talk_bridge',

@@ -5,38 +5,26 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\Service;
 
 class RoomForwardingPolicy {
+	public const ROOM_TYPE_ONE_TO_ONE = 'one_to_one';
+	public const ROOM_TYPE_GROUP = 'group';
+	public const ROOM_TYPE_PUBLIC = 'public';
+	public const ROOM_TYPE_UNKNOWN = 'unknown';
+
 	/**
-	 * @param array<int,string> $participantActors
-	 * @return array{requiresMention:bool,otherParticipantCount:int,matchedBy:string}
+	 * @return array{requiresMention:bool,matchedBy:string}
 	 */
-	public function decide(
-		string $fakeUserId,
-		array $participantActors,
-		int $participantCount,
-		bool $fakeUserInRoom
-	): array {
-		$otherParticipantCount = 0;
+	public function decide(string $roomType): array {
+		$normalized = strtolower(trim($roomType));
+		$requiresMention = !in_array($normalized, [self::ROOM_TYPE_ONE_TO_ONE], true);
 
-		$fakeUserId = trim($fakeUserId);
-		if ($fakeUserId !== '' && $fakeUserInRoom) {
-			$fakeActorKey = 'users:' . $fakeUserId;
-			if ($participantActors !== [] && in_array($fakeActorKey, $participantActors, true)) {
-				$otherParticipantCount = count(array_filter(
-					$participantActors,
-					static fn (string $actor): bool => $actor !== $fakeActorKey
-				));
-			}
-
-			if ($participantCount > 0) {
-				$otherParticipantCount = max($otherParticipantCount, max(0, $participantCount - 1));
-			}
+		$matchedBy = 'mention';
+		if (!$requiresMention) {
+			$matchedBy = 'room_type_one_to_one';
 		}
 
-		$requiresMention = $otherParticipantCount !== 1;
 		return [
 			'requiresMention' => $requiresMention,
-			'otherParticipantCount' => $otherParticipantCount,
-			'matchedBy' => $requiresMention ? 'mention' : 'two_participant_room',
+			'matchedBy' => $matchedBy,
 		];
 	}
 }

@@ -8,42 +8,37 @@ use OCA\IronclawTalkBridge\Service\RoomForwardingPolicy;
 use PHPUnit\Framework\TestCase;
 
 class RoomForwardingPolicyTest extends TestCase {
-	public function testAllowsWithoutMentionForTwoParticipantRoom(): void {
+	public function testAllowsWithoutMentionForOneToOneRooms(): void {
 		$policy = new RoomForwardingPolicy();
 
-		$result = $policy->decide(
-			'ki_assistent',
-			['users:ki_assistent', 'users:alice'],
-			2,
-			true
-		);
+		$result = $policy->decide(RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE);
 
 		self::assertFalse($result['requiresMention']);
-		self::assertSame(1, $result['otherParticipantCount']);
-		self::assertSame('two_participant_room', $result['matchedBy']);
+		self::assertSame('room_type_one_to_one', $result['matchedBy']);
 	}
 
-	public function testRequiresMentionForRoomsWithTwoOrMoreOtherParticipants(): void {
+	public function testRequiresMentionForGroupRooms(): void {
 		$policy = new RoomForwardingPolicy();
 
-		$result = $policy->decide(
-			'ki_assistent',
-			['users:ki_assistent', 'users:alice', 'users:bob'],
-			3,
-			true
-		);
+		$result = $policy->decide(RoomForwardingPolicy::ROOM_TYPE_GROUP);
 
 		self::assertTrue($result['requiresMention']);
-		self::assertSame(2, $result['otherParticipantCount']);
 		self::assertSame('mention', $result['matchedBy']);
 	}
 
-	public function testUsesParticipantCountFallbackWhenActorSnapshotUnavailable(): void {
+	public function testRequiresMentionForPublicRooms(): void {
 		$policy = new RoomForwardingPolicy();
 
-		$result = $policy->decide('ki_assistent', [], 2, true);
+		$result = $policy->decide(RoomForwardingPolicy::ROOM_TYPE_PUBLIC);
 
-		self::assertFalse($result['requiresMention']);
-		self::assertSame(1, $result['otherParticipantCount']);
+		self::assertTrue($result['requiresMention']);
+	}
+
+	public function testRequiresMentionForUnknownRoomTypes(): void {
+		$policy = new RoomForwardingPolicy();
+
+		$result = $policy->decide('custom-room-type');
+
+		self::assertTrue($result['requiresMention']);
 	}
 }
