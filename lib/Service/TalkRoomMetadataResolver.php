@@ -18,6 +18,7 @@ class TalkRoomMetadataResolver {
 
 	public function __construct(
 		ICacheFactory $cacheFactory,
+		private AppConfig $config,
 		private LoggerInterface $logger,
 	) {
 		$this->cache = $cacheFactory->createLocal('ironclaw_talk_bridge_room_metadata');
@@ -134,6 +135,7 @@ class TalkRoomMetadataResolver {
 		if ($botUserId === '') {
 			return false;
 		}
+		$mentionDisplayName = trim($this->config->getMentionDisplayName());
 
 		if (method_exists($room, 'hasParticipant')) {
 			foreach ([
@@ -164,13 +166,47 @@ class TalkRoomMetadataResolver {
 			}
 		}
 
-		$roomActorKeys = $this->collectRoomActorKeys($room);
-		if ($roomActorKeys !== []) {
-			foreach (['users', 'user'] as $actorType) {
-				if (in_array($actorType . ':' . $botUserId, $roomActorKeys, true)) {
+		$participants = $this->collectRoomParticipants($room);
+		if ($participants !== []) {
+			$botUserIdLower = strtolower($botUserId);
+			$mentionDisplayNameLower = strtolower($mentionDisplayName);
+			foreach ($participants as $participant) {
+				$actorType = strtolower((string)($participant['actorType'] ?? ''));
+				$actorId = strtolower((string)($participant['actorId'] ?? ''));
+				$uid = strtolower((string)($participant['uid'] ?? ''));
+				$userId = strtolower((string)($participant['userId'] ?? ''));
+				$id = strtolower((string)($participant['id'] ?? ''));
+				$displayName = strtolower((string)($participant['displayName'] ?? ''));
+
+				if ($actorId !== '' && $actorId === $botUserIdLower) {
+					return true;
+				}
+				if ($uid !== '' && $uid === $botUserIdLower) {
+					return true;
+				}
+				if ($userId !== '' && $userId === $botUserIdLower) {
+					return true;
+				}
+				if ($id !== '' && $id === $botUserIdLower) {
+					return true;
+				}
+				if ($mentionDisplayNameLower !== '' && $displayName !== '' && $displayName === $mentionDisplayNameLower) {
+					return true;
+				}
+
+				if (in_array($actorType, ['users', 'user'], true)
+					&& in_array($actorId, [$botUserIdLower], true)) {
 					return true;
 				}
 			}
+
+			$this->logger->debug('Configured user presence unresolved from room snapshot', [
+				'app' => 'ironclaw_talk_bridge',
+				'botUserId' => $botUserId,
+				'mentionDisplayName' => $mentionDisplayName,
+				'participantCount' => count($participants),
+				'participantSample' => array_slice($participants, 0, 10),
+			]);
 		}
 
 		return false;
@@ -287,10 +323,10 @@ class TalkRoomMetadataResolver {
 	}
 
 	/**
-	 * @return array<int,string>
+	 * @return array<int,array{actorType:string,actorId:string,uid:string,userId:string,id:string,displayName:string}>
 	 */
-	private function collectRoomActorKeys(object $room): array {
-		$actors = [];
+	private function collectRoomParticipants(object $room): array {
+		$participants = [];
 		foreach (['getParticipants', 'getAttendees'] as $method) {
 			if (!method_exists($room, $method)) {
 				continue;
@@ -303,25 +339,44 @@ class TalkRoomMetadataResolver {
 				}
 
 				foreach ($value as $participant) {
-					$key = $this->participantActorKey($participant);
-					if ($key !== null) {
-						$actors[$key] = true;
+					$identity = $this->participantIdentity($participant);
+					if ($identity !== null) {
+						$fingerprint = strtolower(implode('|', [
+							$identity['actorType'],
+							$identity['actorId'],
+							$identity['uid'],
+							$identity['userId'],
+							$identity['id'],
+							$identity['displayName'],
+						]));
+						$participants[$fingerprint] = $identity;
 					}
 				}
 			} catch (\Throwable) {
 			}
 		}
 
-		return array_values(array_keys($actors));
+		return array_values($participants);
 	}
 
-	private function participantActorKey(mixed $participant): ?string {
+	/**
+	 * @return array{actorType:string,actorId:string,uid:string,userId:string,id:string,displayName:string}|null
+	 */
+	private function participantIdentity(mixed $participant): ?array {
 		$actorType = null;
 		$actorId = null;
+		$uid = null;
+		$userId = null;
+		$id = null;
+		$displayName = null;
 
 		if (is_array($participant)) {
 			$actorType = isset($participant['actorType']) ? (string)$participant['actorType'] : null;
 			$actorId = isset($participant['actorId']) ? (string)$participant['actorId'] : null;
+			$uid = isset($participant['uid']) ? (string)$participant['uid'] : null;
+			$userId = isset($participant['userId']) ? (string)$participant['userId'] : null;
+			$id = isset($participant['id']) ? (string)$participant['id'] : null;
+			$displayName = isset($participant['displayName']) ? (string)$participant['displayName'] : null;
 		} elseif (is_object($participant)) {
 			if (method_exists($participant, 'getAttendee')) {
 				try {
@@ -346,14 +401,61 @@ class TalkRoomMetadataResolver {
 				} catch (\Throwable) {
 				}
 			}
+
+			if (method_exists($participant, 'getUID')) {
+				try {
+					$uid = (string)$participant->getUID();
+				} catch (\Throwable) {
+				}
+			}
+
+			if (method_exists($participant, 'getUserId')) {
+				try {
+					$userId = (string)$participant->getUserId();
+				} catch (\Throwable) {
+				}
+			}
+
+			if (method_exists($participant, 'getId')) {
+				try {
+					$id = (string)$participant->getId();
+				} catch (\Throwable) {
+				}
+			}
+
+			if (method_exists($participant, 'getDisplayName')) {
+				try {
+					$displayName = (string)$participant->getDisplayName();
+				} catch (\Throwable) {
+				}
+			}
+
+			if ($displayName === null && method_exists($participant, 'getActorDisplayName')) {
+				try {
+					$displayName = (string)$participant->getActorDisplayName();
+				} catch (\Throwable) {
+				}
+			}
 		}
 
 		$actorType = is_string($actorType) ? trim($actorType) : '';
 		$actorId = is_string($actorId) ? trim($actorId) : '';
-		if ($actorType === '' || $actorId === '') {
+		$uid = is_string($uid) ? trim($uid) : '';
+		$userId = is_string($userId) ? trim($userId) : '';
+		$id = is_string($id) ? trim($id) : '';
+		$displayName = is_string($displayName) ? trim($displayName) : '';
+
+		if ($actorType === '' && $actorId === '' && $uid === '' && $userId === '' && $id === '' && $displayName === '') {
 			return null;
 		}
 
-		return $actorType . ':' . $actorId;
+		return [
+			'actorType' => $actorType,
+			'actorId' => $actorId,
+			'uid' => $uid,
+			'userId' => $userId,
+			'id' => $id,
+			'displayName' => $displayName,
+		];
 	}
 }
