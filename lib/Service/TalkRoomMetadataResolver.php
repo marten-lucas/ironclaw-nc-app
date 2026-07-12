@@ -49,6 +49,16 @@ class TalkRoomMetadataResolver {
 					'botPresent' => $botPresent,
 					'cachedAt' => time(),
 				], self::CACHE_TTL_SECONDS);
+				$this->logger->debug('Room metadata cache updated roomToken=' . $roomToken
+					. ' source=' . $data['source']
+					. ' roomType=' . $roomType
+					. ' botPresent=' . ($botPresent ? 'true' : 'false'), [
+					'app' => 'ironclaw_talk_bridge',
+					'roomToken' => $roomToken,
+					'source' => $data['source'],
+					'roomType' => $roomType,
+					'botPresent' => $botPresent,
+				]);
 
 				return $data;
 			} catch (\Exception $e) {
@@ -61,6 +71,15 @@ class TalkRoomMetadataResolver {
 				if ($cached !== null) {
 					$cached['source'] = 'cache_fallback';
 					$cached['attempts'] = $attempt;
+					$this->logger->debug('Room metadata cache fallback hit roomToken=' . $roomToken
+						. ' roomType=' . (string)($cached['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN)
+						. ' botPresent=' . ((bool)($cached['botPresent'] ?? false) ? 'true' : 'false'), [
+						'app' => 'ironclaw_talk_bridge',
+						'roomToken' => $roomToken,
+						'roomType' => (string)($cached['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN),
+						'botPresent' => (bool)($cached['botPresent'] ?? false),
+						'attempt' => $attempt,
+					]);
 					return $cached;
 				}
 
@@ -90,6 +109,15 @@ class TalkRoomMetadataResolver {
 	}
 
 	private function fetchRawRoomType(object $room): mixed {
+		if (method_exists($room, 'isOneToOne')) {
+			try {
+				if ((bool)$room->isOneToOne()) {
+					return RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE;
+				}
+			} catch (\Throwable) {
+			}
+		}
+
 		foreach (['getType', 'getConversationType', 'getRoomType'] as $method) {
 			if (!method_exists($room, $method)) {
 				continue;
@@ -132,6 +160,15 @@ class TalkRoomMetadataResolver {
 					}
 				} catch (\ArgumentCountError | \TypeError) {
 					continue;
+				}
+			}
+		}
+
+		$roomActorKeys = $this->collectRoomActorKeys($room);
+		if ($roomActorKeys !== []) {
+			foreach (['users', 'user'] as $actorType) {
+				if (in_array($actorType . ':' . $botUserId, $roomActorKeys, true)) {
+					return true;
 				}
 			}
 		}
@@ -247,5 +284,76 @@ class TalkRoomMetadataResolver {
 		}
 
 		return $map;
+	}
+
+	/**
+	 * @return array<int,string>
+	 */
+	private function collectRoomActorKeys(object $room): array {
+		$actors = [];
+		foreach (['getParticipants', 'getAttendees'] as $method) {
+			if (!method_exists($room, $method)) {
+				continue;
+			}
+
+			try {
+				$value = $room->{$method}();
+				if (!is_iterable($value)) {
+					continue;
+				}
+
+				foreach ($value as $participant) {
+					$key = $this->participantActorKey($participant);
+					if ($key !== null) {
+						$actors[$key] = true;
+					}
+				}
+			} catch (\Throwable) {
+			}
+		}
+
+		return array_values(array_keys($actors));
+	}
+
+	private function participantActorKey(mixed $participant): ?string {
+		$actorType = null;
+		$actorId = null;
+
+		if (is_array($participant)) {
+			$actorType = isset($participant['actorType']) ? (string)$participant['actorType'] : null;
+			$actorId = isset($participant['actorId']) ? (string)$participant['actorId'] : null;
+		} elseif (is_object($participant)) {
+			if (method_exists($participant, 'getAttendee')) {
+				try {
+					$attendee = $participant->getAttendee();
+					if (is_object($attendee)) {
+						$participant = $attendee;
+					}
+				} catch (\Throwable) {
+				}
+			}
+
+			if (method_exists($participant, 'getActorType')) {
+				try {
+					$actorType = (string)$participant->getActorType();
+				} catch (\Throwable) {
+				}
+			}
+
+			if (method_exists($participant, 'getActorId')) {
+				try {
+					$actorId = (string)$participant->getActorId();
+				} catch (\Throwable) {
+				}
+			}
+		}
+
+		$actorType = is_string($actorType) ? trim($actorType) : '';
+		$actorId = is_string($actorId) ? trim($actorId) : '';
+		if ($actorType === '' || $actorId === '') {
+			return null;
+		}
+
+		return $actorType . ':' . $actorId;
 	}
 }
