@@ -31,6 +31,33 @@ class TalkMembershipResolverTest extends TestCase {
 		self::assertTrue($resolver->isEventActorRoomMember($event, 'users', 'alice'));
 	}
 
+	public function testAcceptsMatchingActorFromRoomParticipantSnapshot(): void {
+		$resolver = new TalkMembershipResolver($this->buildConfig(true), $this->buildLogger());
+		$room = new class {
+			/** @return array<int,object> */
+			public function getParticipants(): array {
+				return [
+					new class {
+						public function getAttendee(): object {
+							return new class {
+								public function getActorType(): string {
+									return 'users';
+								}
+
+								public function getActorId(): string {
+									return 'alice';
+								}
+							};
+						}
+					},
+				];
+			}
+		};
+		$event = new FakeChatMessageSentEvent(null, $room);
+
+		self::assertTrue($resolver->isEventActorRoomMember($event, 'users', 'alice'));
+	}
+
 	private function buildConfig(bool $strict): AppConfig {
 		$config = $this->createMock(\OCP\IConfig::class);
 		$config->method('getAppValue')->willReturnCallback(
@@ -50,7 +77,10 @@ class TalkMembershipResolverTest extends TestCase {
 }
 
 class FakeChatMessageSentEvent {
-	public function __construct(private ?FakeParticipant $participant) {
+	public function __construct(
+		private ?FakeParticipant $participant,
+		private ?object $room = null,
+	) {
 	}
 
 	public function getParticipant(): ?FakeParticipant {
@@ -58,6 +88,10 @@ class FakeChatMessageSentEvent {
 	}
 
 	public function getRoom(): object {
+		if (is_object($this->room)) {
+			return $this->room;
+		}
+
 		return new class {
 		};
 	}
