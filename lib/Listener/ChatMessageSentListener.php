@@ -10,7 +10,6 @@ use OCA\IronclawTalkBridge\Service\BridgeCounters;
 use OCA\IronclawTalkBridge\Service\MentionMatcher;
 use OCA\IronclawTalkBridge\Service\OutboxDispatcher;
 use OCA\IronclawTalkBridge\Service\RoomForwardingPolicy;
-use OCA\IronclawTalkBridge\Service\TalkRoomParticipantsResolver;
 use OCA\IronclawTalkBridge\Service\RoomScopeService;
 use OCA\IronclawTalkBridge\Service\TalkMembershipResolver;
 use OCA\IronclawTalkBridge\Service\TalkEventMapper;
@@ -29,7 +28,6 @@ class ChatMessageSentListener implements IEventListener {
 		private MentionMatcher $mentionMatcher,
 		private RoomScopeService $roomScope,
 		private TalkMembershipResolver $membershipResolver,
-		private TalkRoomParticipantsResolver $roomParticipantsResolver,
 		private RoomForwardingPolicy $forwardingPolicy,
 		private OutboxRepository $outbox,
 		private OutboxDispatcher $dispatcher,
@@ -73,25 +71,6 @@ class ChatMessageSentListener implements IEventListener {
 			? $payload['room']['participantActors']
 			: [];
 		$participantDataSource = 'event_payload';
-		if ($roomParticipantActors === [] || $roomParticipantCount === 0) {
-			try {
-				$dbSnapshot = $this->roomParticipantsResolver->resolveByRoomToken($roomToken);
-				if (($dbSnapshot['participantActors'] ?? []) !== []) {
-					$roomParticipantActors = is_array($dbSnapshot['participantActors'])
-						? $dbSnapshot['participantActors']
-						: [];
-					$roomParticipantCount = (int)($dbSnapshot['participantCount'] ?? count($roomParticipantActors));
-					$participantDataSource = (string)($dbSnapshot['dataSource'] ?? 'db_unknown');
-				}
-			} catch (\Throwable $e) {
-				$participantDataSource = 'db_lookup_exception';
-				$this->logger->debug('Participant lookup crashed, falling back to event payload', [
-					'app' => 'ironclaw_talk_bridge',
-					'roomToken' => $roomToken,
-					'error' => $e->getMessage(),
-				]);
-			}
-		}
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 
 		if (!$this->roomScope->isAllowed($roomToken)) {
@@ -235,7 +214,10 @@ class ChatMessageSentListener implements IEventListener {
 				'roomToken' => $roomToken,
 				'otherParticipantCount' => (int)($forwardingDecision['otherParticipantCount'] ?? 0),
 			]);
-			$this->dispatcher->dispatchDue(1);
+			$this->logger->debug('Immediate dispatch skipped to avoid dirty table reads; queued event will be delivered by background job', [
+				'app' => 'ironclaw_talk_bridge',
+				'eventId' => $payload['eventId'] ?? null,
+			]);
 		} else {
 			$this->counters->increment(BridgeCounters::KEY_EVENTS_DEDUPED);
 		}
