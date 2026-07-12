@@ -21,4 +21,20 @@ class MentionMatcherTest extends TestCase {
 		self::assertSame('summarize this', $matcher->stripExactMention('@Ironclaw summarize this', 'Ironclaw'));
 		self::assertSame('please summarize this', $matcher->stripExactMention('please @Ironclaw summarize this', 'Ironclaw'));
 	}
+
+	public function testContainsMentionByConfiguredUserId(): void {
+		$matcher = new MentionMatcher();
+		self::assertTrue($matcher->containsMention(
+			'@ki_assistent bitte zusammenfassen',
+			[],
+			'Ironclaw',
+			'ki_assistent'
+		));
+		self::assertFalse($matcher->containsMention(
+			'bitte zusammenfassen',
+			[],
+			'Ironclaw',
+			'ki_assistent'
+		));
+	}
 }

@@ -21,7 +21,10 @@ Alternatives and why not primary:
 
 - Inbound only in Nextcloud app:
   - Listen to `ChatMessageSentEvent`.
-  - Mention-only gating (`@Display Name` exact match).
+  - Room-aware gating:
+    - exactly fake user + one other participant => forward without mention.
+    - fake user + two or more other participants => require mention.
+  - Mention matching supports exact `@<fake_user_id>` mentions from Talk UI.
   - Ignore self messages of configured fake user.
   - Build signed event payload and enqueue in durable outbox.
   - Retry delivery to Ironclaw on transient failures.
