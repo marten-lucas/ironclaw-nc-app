@@ -88,7 +88,7 @@ class OutboxRepository {
 	public function statusCounts(): array {
 		$query = $this->db->getQueryBuilder();
 		$query->select('status')
-			->addSelectAlias($query->createFunction('COUNT(*)'), 'count')
+			->addSelect($query->createFunction('COUNT(*) AS count'))
 			->from('ic_talk_outbox')
 			->groupBy('status');
 

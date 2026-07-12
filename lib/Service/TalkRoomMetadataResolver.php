@@ -108,16 +108,32 @@ class TalkRoomMetadataResolver {
 		}
 
 		if (method_exists($room, 'hasParticipant')) {
-			try {
-				return (bool)$room->hasParticipant('users', $botUserId);
-			} catch (\ArgumentCountError | \TypeError) {
-				return (bool)$room->hasParticipant($botUserId);
+			foreach ([
+				['users', $botUserId],
+				['user', $botUserId],
+				[$botUserId],
+			] as $args) {
+				try {
+					if ((bool)$room->hasParticipant(...$args)) {
+						return true;
+					}
+				} catch (\ArgumentCountError | \TypeError) {
+					continue;
+				}
 			}
 		}
 
 		if (method_exists($room, 'getParticipantByActor')) {
-			$value = $room->getParticipantByActor('users', $botUserId);
-			return $value !== null;
+			foreach (['users', 'user'] as $actorType) {
+				try {
+					$value = $room->getParticipantByActor($actorType, $botUserId);
+					if ($value !== null) {
+						return true;
+					}
+				} catch (\ArgumentCountError | \TypeError) {
+					continue;
+				}
+			}
 		}
 
 		return false;
