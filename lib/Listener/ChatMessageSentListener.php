@@ -10,6 +10,7 @@ use OCA\IronclawTalkBridge\Service\BridgeCounters;
 use OCA\IronclawTalkBridge\Service\MentionMatcher;
 use OCA\IronclawTalkBridge\Service\OutboxDispatcher;
 use OCA\IronclawTalkBridge\Service\RoomForwardingPolicy;
+use OCA\IronclawTalkBridge\Service\TalkRoomParticipantsResolver;
 use OCA\IronclawTalkBridge\Service\RoomScopeService;
 use OCA\IronclawTalkBridge\Service\TalkMembershipResolver;
 use OCA\IronclawTalkBridge\Service\TalkEventMapper;
@@ -28,6 +29,7 @@ class ChatMessageSentListener implements IEventListener {
 		private MentionMatcher $mentionMatcher,
 		private RoomScopeService $roomScope,
 		private TalkMembershipResolver $membershipResolver,
+		private TalkRoomParticipantsResolver $roomParticipantsResolver,
 		private RoomForwardingPolicy $forwardingPolicy,
 		private OutboxRepository $outbox,
 		private OutboxDispatcher $dispatcher,
@@ -48,6 +50,8 @@ class ChatMessageSentListener implements IEventListener {
 		$payload = $this->mapper->map($event);
 		$roomToken = (string)($payload['roomToken'] ?? '');
 		$rawMessage = (string)($payload['message']['raw'] ?? '');
+		$messagePreview = trim((string)preg_replace('/\s+/u', ' ', $rawMessage));
+		$messagePreview = mb_substr($messagePreview, 0, 200);
 		$messageParameters = is_array($payload['message']['parameters'] ?? null)
 			? $payload['message']['parameters']
 			: [];
@@ -57,6 +61,17 @@ class ChatMessageSentListener implements IEventListener {
 		$roomParticipantActors = is_array($payload['room']['participantActors'] ?? null)
 			? $payload['room']['participantActors']
 			: [];
+		$participantDataSource = 'event_payload';
+		if ($roomParticipantActors === [] || $roomParticipantCount === 0) {
+			$dbSnapshot = $this->roomParticipantsResolver->resolveByRoomToken($roomToken);
+			if (($dbSnapshot['participantActors'] ?? []) !== []) {
+				$roomParticipantActors = is_array($dbSnapshot['participantActors'])
+					? $dbSnapshot['participantActors']
+					: [];
+				$roomParticipantCount = (int)($dbSnapshot['participantCount'] ?? count($roomParticipantActors));
+				$participantDataSource = (string)($dbSnapshot['dataSource'] ?? 'db_unknown');
+			}
+		}
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 
 		if (!$this->roomScope->isAllowed($roomToken)) {
@@ -72,10 +87,8 @@ class ChatMessageSentListener implements IEventListener {
 		$membership = $this->membershipResolver->evaluateEventActorRoomMember($event, $actorType, $actorId);
 		if (!(bool)($membership['isMember'] ?? false)) {
 			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
-			$preview = trim((string)preg_replace('/\s+/u', ' ', $rawMessage));
-			$preview = mb_substr($preview, 0, 200);
 			$rejectionReason = (string)($membership['reason'] ?? 'unknown');
-			$this->logger->debug('Membership resolver rejected actor for scope=room reason=' . $rejectionReason . ': message="' . $preview . '"', [
+			$this->logger->debug('Membership resolver rejected actor for scope=room reason=' . $rejectionReason . ': message="' . $messagePreview . '"', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
 				'reason' => $rejectionReason,
@@ -135,8 +148,24 @@ class ChatMessageSentListener implements IEventListener {
 			$roomParticipantCount,
 			$fakeUserInRoom
 		);
+		if ($fakeUserId !== ''
+			&& $fakeUserInRoom
+			&& $actorType === 'users'
+			&& $actorId !== $fakeUserId
+			&& (int)($forwardingDecision['otherParticipantCount'] ?? 0) === 0
+		) {
+			$forwardingDecision = [
+				'requiresMention' => false,
+				'otherParticipantCount' => 1,
+				'matchedBy' => 'actor_plus_fakeuser_fallback',
+			];
+		}
 		$requiresMention = (bool)($forwardingDecision['requiresMention'] ?? true);
-		$this->logger->debug('Forwarding decision computed', [
+		$this->logger->debug('Forwarding decision computed requiresMention=' . ($requiresMention ? 'true' : 'false')
+			. ' otherParticipants=' . (string)((int)($forwardingDecision['otherParticipantCount'] ?? 0))
+			. ' matchedBy=' . (string)($forwardingDecision['matchedBy'] ?? 'mention')
+			. ' participantsSource=' . $participantDataSource
+			. ' message="' . $messagePreview . '"', [
 			'app' => 'ironclaw_talk_bridge',
 			'eventId' => $payload['eventId'] ?? null,
 			'roomToken' => $roomToken,
@@ -146,6 +175,7 @@ class ChatMessageSentListener implements IEventListener {
 			'fakeUserId' => $fakeUserId,
 			'fakeUserInRoom' => $fakeUserInRoom,
 			'fakeMembershipReason' => $fakeMembershipReason,
+			'participantDataSource' => $participantDataSource,
 		]);
 
 		if ($requiresMention && !$this->mentionMatcher->containsMention(
@@ -155,7 +185,9 @@ class ChatMessageSentListener implements IEventListener {
 			$fakeUserId
 		)) {
 			$this->counters->increment(BridgeCounters::KEY_MENTION_MISSES);
-			$this->logger->debug('Forwarding denied reason=mention_required_missing', [
+			$this->logger->debug('Forwarding denied reason=mention_required_missing otherParticipants='
+				. (string)((int)($forwardingDecision['otherParticipantCount'] ?? 0))
+				. ' message="' . $messagePreview . '"', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
 				'isDirectRoom' => $isDirectRoom,
@@ -175,7 +207,9 @@ class ChatMessageSentListener implements IEventListener {
 		$inserted = $this->outbox->enqueue($payload);
 		if ($inserted) {
 			$this->counters->increment(BridgeCounters::KEY_EVENTS_ENQUEUED);
-			$this->logger->info('Forwarding allowed reason=' . (string)($payload['mention']['matchedBy'] ?? 'unknown'), [
+			$this->logger->info('Forwarding allowed reason=' . (string)($payload['mention']['matchedBy'] ?? 'unknown')
+				. ' otherParticipants=' . (string)((int)($forwardingDecision['otherParticipantCount'] ?? 0))
+				. ' message="' . $messagePreview . '"', [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
 				'roomToken' => $roomToken,
