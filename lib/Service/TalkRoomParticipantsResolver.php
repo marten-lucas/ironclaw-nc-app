@@ -36,7 +36,7 @@ class TalkRoomParticipantsResolver {
 		try {
 			$result = $query->executeQuery();
 			$actors = [];
-			while (($row = $result->fetch()) !== false) {
+			while (($row = $result->fetchAssociative()) !== false) {
 				$actorType = isset($row['actor_type']) ? trim((string)$row['actor_type']) : '';
 				$actorId = isset($row['actor_id']) ? trim((string)$row['actor_id']) : '';
 				if ($actorType === '' || $actorId === '') {
