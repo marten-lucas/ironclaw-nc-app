@@ -18,6 +18,7 @@
   <commands>
     <command>OCA\IronclawTalkBridge\Command\DispatchQueuedEvents</command>
     <command>OCA\IronclawTalkBridge\Command\ShowBridgeMetrics</command>
+    <command>OCA\IronclawTalkBridge\Command\RefreshParticipantSnapshots</command>
   </commands>
   <dependencies>
     <nextcloud min-version="31" max-version="35"/>

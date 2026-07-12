@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\IronclawTalkBridge\Listener;
 
+use OCA\IronclawTalkBridge\Db\RoomParticipantsSnapshotRepository;
 use OCA\IronclawTalkBridge\Db\OutboxRepository;
 use OCA\IronclawTalkBridge\Service\AppConfig;
 use OCA\IronclawTalkBridge\Service\BridgeCounters;
@@ -28,6 +29,7 @@ class ChatMessageSentListener implements IEventListener {
 		private MentionMatcher $mentionMatcher,
 		private RoomScopeService $roomScope,
 		private TalkMembershipResolver $membershipResolver,
+		private RoomParticipantsSnapshotRepository $participantSnapshots,
 		private RoomForwardingPolicy $forwardingPolicy,
 		private OutboxRepository $outbox,
 		private OutboxDispatcher $dispatcher,
@@ -71,6 +73,20 @@ class ChatMessageSentListener implements IEventListener {
 			? $payload['room']['participantActors']
 			: [];
 		$participantDataSource = 'event_payload';
+		if ($roomParticipantActors === [] || $roomParticipantCount === 0) {
+			$snapshot = $this->participantSnapshots->getByRoomToken($roomToken);
+			if (is_array($snapshot)) {
+				$snapshotActors = is_array($snapshot['participantActors'] ?? null)
+					? $snapshot['participantActors']
+					: [];
+				$snapshotCount = (int)($snapshot['participantCount'] ?? 0);
+				if ($snapshotActors !== [] || $snapshotCount > 0) {
+					$roomParticipantActors = $snapshotActors;
+					$roomParticipantCount = $snapshotCount > 0 ? $snapshotCount : count($snapshotActors);
+					$participantDataSource = 'snapshot_cache';
+				}
+			}
+		}
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 
 		if (!$this->roomScope->isAllowed($roomToken)) {
