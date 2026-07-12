@@ -123,7 +123,7 @@ class ChatMessageSentListener implements IEventListener {
 
 		if (!$fakeUserInRoom) {
 			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
-			$this->logger->debug('Room does not contain configured fake user roomType=' . $roomType . ' source=' . $roomMetadataSource, [
+			$this->logger->debug('Reject fake user not in room roomToken=' . $roomToken . ' roomType=' . $roomType . ' source=' . $roomMetadataSource, [
 				'app' => 'ironclaw_talk_bridge',
 				'eventId' => $payload['eventId'] ?? null,
 				'roomToken' => $roomToken,

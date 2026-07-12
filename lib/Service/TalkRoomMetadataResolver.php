@@ -53,7 +53,7 @@ class TalkRoomMetadataResolver {
 				$this->logger->debug('Room metadata cache updated roomToken=' . $roomToken
 					. ' source=' . $data['source']
 					. ' roomType=' . $roomType
-					. ' botPresent=' . ($botPresent ? 'true' : 'false'), [
+					. ' fakeUserInRoom=' . ($botPresent ? 'true' : 'false'), [
 					'app' => 'ironclaw_talk_bridge',
 					'roomToken' => $roomToken,
 					'source' => $data['source'],
@@ -74,7 +74,7 @@ class TalkRoomMetadataResolver {
 					$cached['attempts'] = $attempt;
 					$this->logger->debug('Room metadata cache fallback hit roomToken=' . $roomToken
 						. ' roomType=' . (string)($cached['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN)
-						. ' botPresent=' . ((bool)($cached['botPresent'] ?? false) ? 'true' : 'false'), [
+						. ' fakeUserInRoom=' . ((bool)($cached['botPresent'] ?? false) ? 'true' : 'false'), [
 						'app' => 'ironclaw_talk_bridge',
 						'roomToken' => $roomToken,
 						'roomType' => (string)($cached['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN),
