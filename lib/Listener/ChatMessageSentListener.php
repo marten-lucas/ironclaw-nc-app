@@ -44,6 +44,11 @@ class ChatMessageSentListener implements IEventListener {
 		}
 
 		if (!$this->config->isEnabled() || !$this->config->isReadyForDelivery()) {
+			$this->logger->debug('Inbound event skipped reason=bridge_disabled_or_not_ready', [
+				'app' => 'ironclaw_talk_bridge',
+				'bridgeEnabled' => $this->config->isEnabled(),
+				'isReadyForDelivery' => $this->config->isReadyForDelivery(),
+			]);
 			return;
 		}
 
@@ -52,6 +57,12 @@ class ChatMessageSentListener implements IEventListener {
 		$rawMessage = (string)($payload['message']['raw'] ?? '');
 		$messagePreview = trim((string)preg_replace('/\s+/u', ' ', $rawMessage));
 		$messagePreview = mb_substr($messagePreview, 0, 200);
+		$this->logger->debug('Inbound event received roomToken=' . $roomToken . ' message="' . $messagePreview . '"', [
+			'app' => 'ironclaw_talk_bridge',
+			'eventId' => $payload['eventId'] ?? null,
+			'roomToken' => $roomToken,
+			'messageRaw' => mb_substr($rawMessage, 0, 500),
+		]);
 		$messageParameters = is_array($payload['message']['parameters'] ?? null)
 			? $payload['message']['parameters']
 			: [];
