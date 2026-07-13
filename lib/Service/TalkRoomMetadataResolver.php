@@ -27,9 +27,9 @@ class TalkRoomMetadataResolver {
 	}
 
 	/**
-	 * @return array{roomType:string,botPresent:bool,participantCount:int|null,source:string,attempts:int}
+	 * @return array{roomType:string,fakeUserInRoom:bool,participantCount:int|null,source:string,attempts:int}
 	 */
-	public function resolve(object $room, string $botUserId): array {
+	public function resolve(object $room, string $fakeUserId): array {
 		$roomToken = $this->roomToken($room);
 		$cacheKey = $this->cacheKey($roomToken);
 		$attempt = 0;
@@ -38,33 +38,33 @@ class TalkRoomMetadataResolver {
 		while ($attempt < self::MAX_ATTEMPTS) {
 			$attempt++;
 			try {
-				$dbData = $this->fetchRoomDataFromDb($room, $botUserId);
+				$dbData = $this->fetchRoomDataFromDb($room, $fakeUserId);
 				$roomType = $dbData['roomType'];
-				$botPresent = $dbData['botPresent'];
+				$fakeUserInRoom = $dbData['fakeUserInRoom'];
 				$participantCount = $dbData['participantCount'];
 
 				$data = [
 					'roomType' => $roomType,
-					'botPresent' => $botPresent,
+					'fakeUserInRoom' => $fakeUserInRoom,
 					'participantCount' => $participantCount,
 					'source' => $attempt === 1 ? 'live' : 'live_retry',
 					'attempts' => $attempt,
 				];
 				$this->cache->set($cacheKey, [
 					'roomType' => $roomType,
-					'botPresent' => $botPresent,
+					'fakeUserInRoom' => $fakeUserInRoom,
 					'participantCount' => $participantCount,
 					'cachedAt' => time(),
 				], self::CACHE_TTL_SECONDS);
 				$this->logger->debug('Room metadata cache updated roomToken=' . $roomToken
 					. ' source=' . $data['source']
 					. ' roomType=' . $roomType
-					. ' fakeUserInRoom=' . ($botPresent ? 'true' : 'false'), [
+					. ' fakeUserInRoom=' . ($fakeUserInRoom ? 'true' : 'false'), [
 					'app' => 'ironclaw_talk_bridge',
 					'roomToken' => $roomToken,
 					'source' => $data['source'],
 					'roomType' => $roomType,
-					'botPresent' => $botPresent,
+					'fakeUserInRoom' => $fakeUserInRoom,
 				]);
 
 				return $data;
@@ -80,11 +80,11 @@ class TalkRoomMetadataResolver {
 					$cached['attempts'] = $attempt;
 					$this->logger->debug('Room metadata cache fallback hit roomToken=' . $roomToken
 						. ' roomType=' . (string)($cached['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN)
-						. ' fakeUserInRoom=' . ((bool)($cached['botPresent'] ?? false) ? 'true' : 'false'), [
+						. ' fakeUserInRoom=' . ((bool)($cached['fakeUserInRoom'] ?? false) ? 'true' : 'false'), [
 						'app' => 'ironclaw_talk_bridge',
 						'roomToken' => $roomToken,
 						'roomType' => (string)($cached['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN),
-						'botPresent' => (bool)($cached['botPresent'] ?? false),
+						'fakeUserInRoom' => (bool)($cached['fakeUserInRoom'] ?? false),
 						'attempt' => $attempt,
 					]);
 					return $cached;
@@ -109,7 +109,7 @@ class TalkRoomMetadataResolver {
 
 		return [
 			'roomType' => RoomForwardingPolicy::ROOM_TYPE_UNKNOWN,
-			'botPresent' => false,
+			'fakeUserInRoom' => false,
 			'participantCount' => null,
 			'source' => 'unknown',
 			'attempts' => $attempt,
@@ -117,15 +117,15 @@ class TalkRoomMetadataResolver {
 	}
 
 	/**
-	 * @return array{roomType:string,botPresent:bool,participantCount:int}
+	 * @return array{roomType:string,fakeUserInRoom:bool,participantCount:int}
 	 */
-	private function fetchRoomDataFromDb(object $room, string $botUserId): array {
+	private function fetchRoomDataFromDb(object $room, string $fakeUserId): array {
 		$roomToken = $this->roomToken($room);
 		if ($roomToken === '') {
 			throw new \RuntimeException('Room token is missing');
 		}
 
-		$botUserId = trim($botUserId);
+		$fakeUserId = trim($fakeUserId);
 		$mentionDisplayName = trim($this->config->getMentionDisplayName());
 
 		$query = $this->db->getQueryBuilder();
@@ -136,7 +136,7 @@ class TalkRoomMetadataResolver {
 
 		$result = $query->executeQuery();
 		$participantCount = 0;
-		$botPresent = false;
+		$fakeUserInRoom = false;
 		$sample = [];
 
 		while (($row = method_exists($result, 'fetchAssociative') ? $result->fetchAssociative() : $result->fetch()) !== false) {
@@ -155,13 +155,13 @@ class TalkRoomMetadataResolver {
 				$sample[] = ['actorType' => $actorType, 'actorId' => $actorId];
 			}
 
-			if ($botUserId !== '' && in_array(strtolower($actorType), ['users', 'user'], true)
-				&& strcasecmp($actorId, $botUserId) === 0) {
-				$botPresent = true;
+			if ($fakeUserId !== '' && in_array(strtolower($actorType), ['users', 'user'], true)
+				&& strcasecmp($actorId, $fakeUserId) === 0) {
+				$fakeUserInRoom = true;
 			}
 
-			if (!$botPresent && $mentionDisplayName !== '' && strcasecmp($actorId, $mentionDisplayName) === 0) {
-				$botPresent = true;
+			if (!$fakeUserInRoom && $mentionDisplayName !== '' && strcasecmp($actorId, $mentionDisplayName) === 0) {
+				$fakeUserInRoom = true;
 			}
 		}
 
@@ -173,11 +173,11 @@ class TalkRoomMetadataResolver {
 			? RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE
 			: RoomForwardingPolicy::ROOM_TYPE_GROUP;
 
-		if (!$botPresent) {
+		if (!$fakeUserInRoom) {
 			$this->logger->debug('Configured user presence unresolved from DB attendees', [
 				'app' => 'ironclaw_talk_bridge',
 				'roomToken' => $roomToken,
-				'fakeUserId' => $botUserId,
+				'fakeUserId' => $fakeUserId,
 				'mentionDisplayName' => $mentionDisplayName,
 				'participantCount' => $participantCount,
 				'participantSample' => $sample,
@@ -186,13 +186,13 @@ class TalkRoomMetadataResolver {
 
 		return [
 			'roomType' => $roomType,
-			'botPresent' => $botPresent,
+			'fakeUserInRoom' => $fakeUserInRoom,
 			'participantCount' => $participantCount,
 		];
 	}
 
 	/**
-	 * @return array{roomType:string,botPresent:bool,participantCount:int|null}|null
+	 * @return array{roomType:string,fakeUserInRoom:bool,participantCount:int|null}|null
 	 */
 	private function readCache(string $cacheKey): ?array {
 		$cached = $this->cache->get($cacheKey);
@@ -207,7 +207,7 @@ class TalkRoomMetadataResolver {
 
 		return [
 			'roomType' => $roomType,
-			'botPresent' => (bool)($cached['botPresent'] ?? false),
+			'fakeUserInRoom' => (bool)($cached['fakeUserInRoom'] ?? $cached['botPresent'] ?? false),
 			'participantCount' => isset($cached['participantCount']) ? (int)$cached['participantCount'] : null,
 		];
 	}

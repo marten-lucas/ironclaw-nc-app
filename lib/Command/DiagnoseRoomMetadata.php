@@ -54,7 +54,7 @@ class DiagnoseRoomMetadata extends Command {
 		$output->writeln('roomToken=' . $roomToken);
 		$output->writeln('fakeUserId=' . ($fakeUserId !== '' ? $fakeUserId : '(empty)'));
 		$output->writeln('roomType=' . (string)($metadata['roomType'] ?? 'unknown'));
-		$output->writeln('fakeUserInRoom=' . ((bool)($metadata['botPresent'] ?? false) ? 'true' : 'false'));
+		$output->writeln('fakeUserInRoom=' . ((bool)($metadata['fakeUserInRoom'] ?? false) ? 'true' : 'false'));
 		$output->writeln('participantCount=' . (($metadata['participantCount'] ?? null) === null ? 'null' : (string)$metadata['participantCount']));
 		$output->writeln('source=' . (string)($metadata['source'] ?? 'unknown'));
 		$output->writeln('attempts=' . (string)($metadata['attempts'] ?? 0));

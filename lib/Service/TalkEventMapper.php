@@ -45,7 +45,7 @@ class TalkEventMapper {
 			'room' => [
 				'type' => RoomForwardingPolicy::ROOM_TYPE_UNKNOWN,
 				'detectionMethod' => 'event_minimal',
-				'botPresent' => false,
+				'fakeUserInRoom' => false,
 			],
 			'message' => [
 				'raw' => $messageData['message'],

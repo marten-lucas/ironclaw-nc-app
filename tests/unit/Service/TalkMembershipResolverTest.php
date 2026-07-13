@@ -38,7 +38,7 @@ class TalkMembershipResolverTest extends TestCase {
 		self::assertTrue($resolver->isEventActorRoomMember($event, 'users', 'alice'));
 	}
 
-	public function testAcceptsMatchingActorFromRoomParticipantSnapshot(): void {
+	public function testAcceptsMatchingActorFromRoomParticipantCollection(): void {
 		$resolver = new TalkMembershipResolver($this->buildConfig(true), $this->buildLogger());
 		$room = new class {
 			/** @return array<int,object> */

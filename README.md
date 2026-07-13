@@ -22,18 +22,19 @@ Alternatives and why not primary:
 - Inbound only in Nextcloud app:
   - Listen to `ChatMessageSentEvent`.
   - Room-aware gating:
-    - exactly fake user + one other participant => forward without mention.
-    - fake user + two or more other participants => require mention.
+    - rooms resolved to `one_to_one` => forward without mention.
+    - rooms resolved to `group` or `public` => require mention.
   - Mention matching supports exact `@<fake_user_id>` mentions from Talk UI.
   - Ignore self messages of configured fake user.
   - Build signed event payload and enqueue in durable outbox.
   - Retry delivery to Ironclaw on transient failures.
+  - Resolve room metadata from Talk DB attendees with cache-backed dirty-read retry handling.
 - Outbound remains in Ironclaw via fake-user REST path (unchanged).
 
 Note on room relevance in Phase A:
 - The app enforces room scope through configurable allowlist tokens (or all rooms when empty).
 - Self-loop prevention is enforced by `fake_user_id` check.
-- A stricter "fake user is currently room member" resolver is planned for hardening once a stable Talk API path is finalized.
+- The current resolver verifies fake-user room membership from Talk attendee records and caches the result in Nextcloud memory cache.
 
 ## App Config (set via Nextcloud app config)
 
@@ -128,7 +129,7 @@ It validates:
 1. Fake user is normal room participant.
 2. No per-room Talk webhook bot needed.
 3. Exact mention triggers Ironclaw.
-4. No mention does not trigger.
+4. No mention triggers only when the resolved room type is `one_to_one`.
 5. Self messages are ignored.
 6. Reply posted in same room by existing Ironclaw outbound path.
 7. Multiple rooms work in parallel.

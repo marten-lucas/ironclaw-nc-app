@@ -144,7 +144,7 @@ class TalkMembershipResolver {
 					}
 				}
 			} catch (\Throwable $e) {
-				$this->logger->debug('Talk room participant snapshot failed in membership resolver', [
+				$this->logger->debug('Talk room participant collection failed in membership resolver', [
 					'app' => 'ironclaw_talk_bridge',
 					'method' => $method,
 					'error' => $e->getMessage(),

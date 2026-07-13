@@ -119,7 +119,7 @@ class ChatMessageSentListener implements IEventListener {
 		}
 		$roomType = (string)($roomMetadata['roomType'] ?? RoomForwardingPolicy::ROOM_TYPE_UNKNOWN);
 		$roomMetadataSource = (string)($roomMetadata['source'] ?? 'unknown');
-		$fakeUserInRoom = (bool)($roomMetadata['botPresent'] ?? false);
+		$fakeUserInRoom = (bool)($roomMetadata['fakeUserInRoom'] ?? false);
 
 		if (!$fakeUserInRoom) {
 			$this->counters->increment(BridgeCounters::KEY_MEMBERSHIP_REJECTS);
@@ -181,7 +181,7 @@ class ChatMessageSentListener implements IEventListener {
 
 		$payload['room']['type'] = $roomType;
 		$payload['room']['detectionMethod'] = (string)($roomMetadata['source'] ?? 'unknown');
-		$payload['room']['botPresent'] = $fakeUserInRoom;
+		$payload['room']['fakeUserInRoom'] = $fakeUserInRoom;
 		$payload['mention'] = [
 			'displayName' => $mentionDisplayName,
 			'matchedBy' => (string)($forwardingDecision['matchedBy'] ?? 'mention'),
