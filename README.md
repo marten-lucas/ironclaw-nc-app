@@ -79,26 +79,34 @@ Body shape:
 
 ```json
 {
-  "eventId": "nc-talk:<roomToken>:<messageId>",
-  "source": "nextcloud-talk",
-  "roomToken": "abc123",
-  "messageId": 456,
-  "replyTo": 123,
+  "type": "Create",
   "actor": {
     "type": "users",
     "id": "alice",
-    "displayName": "Alice"
+    "name": "Alice"
   },
+  "object": {
+    "id": "456",
+    "content": "@Ironclaw please summarize"
+  },
+  "target": {
+    "id": "abc123"
+  },
+  "eventId": "nc-talk:abc123:456",
   "mention": {
     "displayName": "Ironclaw"
   },
-  "message": {
+  "bridgeMessage": {
     "raw": "@Ironclaw please summarize",
     "stripped": "please summarize"
   },
   "occurredAt": "2026-07-09T10:00:00+00:00"
 }
 ```
+
+Notes:
+- The bridge stores an internal payload in the outbox, then renders a Nextcloud Talk-compatible webhook body (`type/actor/object/target`) at dispatch time.
+- For one-to-one rooms that are allowed without explicit mention, the dispatcher prefixes the configured mention token so Ironclaw can still accept the event on `/webhooks/nextcloud/talk`.
 
 ## Delivery Behavior
 

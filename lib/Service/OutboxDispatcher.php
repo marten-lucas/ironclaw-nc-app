@@ -87,8 +87,10 @@ class OutboxDispatcher {
 			'roomType' => $prepared['roomType'] ?? null,
 		]);
 
+		$wirePayload = $this->buildIronclawWebhookPayload($deliveryPayload);
+
 		try {
-			$statusCode = $this->client->deliver($deliveryPayload);
+			$statusCode = $this->client->deliver($wirePayload);
 			if ($statusCode >= 200 && $statusCode < 300) {
 				$this->outbox->markDelivered($id);
 				$this->counters->increment(BridgeCounters::KEY_EVENTS_DELIVERED);
@@ -218,5 +220,72 @@ class OutboxDispatcher {
 			'payload' => $payload,
 			'roomType' => $roomType,
 		];
+	}
+
+	/**
+	 * Render the canonical Nextcloud Talk webhook shape expected by Ironclaw.
+	 *
+	 * @param array<string,mixed> $payload
+	 * @return array<string,mixed>
+	 */
+	private function buildIronclawWebhookPayload(array $payload): array {
+		$roomToken = trim((string)($payload['roomToken'] ?? ''));
+		$messageId = trim((string)($payload['messageId'] ?? ''));
+		$eventId = trim((string)($payload['eventId'] ?? ''));
+
+		$actor = is_array($payload['actor'] ?? null) ? $payload['actor'] : [];
+		$actorType = trim((string)($actor['type'] ?? 'users'));
+		$actorId = trim((string)($actor['id'] ?? 'unknown-actor'));
+		$actorName = trim((string)($actor['displayName'] ?? $actor['name'] ?? ''));
+
+		$message = is_array($payload['message'] ?? null) ? $payload['message'] : [];
+		$rawMessage = trim((string)($message['raw'] ?? ''));
+		$strippedMessage = trim((string)($message['stripped'] ?? ''));
+		$contentText = $strippedMessage !== '' ? $strippedMessage : $rawMessage;
+
+		$mentionDisplayName = ltrim($this->config->getMentionDisplayName(), '@');
+		$mentionToken = $mentionDisplayName !== '' ? '@' . $mentionDisplayName : '';
+		if ($mentionToken !== '' && strpos($contentText, $mentionToken) === false) {
+			$contentText = trim($mentionToken . ' ' . $contentText);
+		}
+
+		if ($contentText === '') {
+			$contentText = $mentionToken !== '' ? $mentionToken : 'ping';
+		}
+
+		$wirePayload = [
+			'type' => 'Create',
+			'actor' => [
+				'type' => $actorType !== '' ? $actorType : 'users',
+				'id' => $actorId,
+				'name' => $actorName,
+			],
+			'object' => [
+				'id' => $messageId,
+				'content' => $contentText,
+			],
+			'target' => [
+				'id' => $roomToken,
+			],
+		];
+
+		// Keep bridge metadata for diagnostics and correlation.
+		if ($eventId !== '') {
+			$wirePayload['eventId'] = $eventId;
+		}
+		if (isset($payload['room']) && is_array($payload['room'])) {
+			$wirePayload['room'] = $payload['room'];
+		}
+		if (isset($payload['mention']) && is_array($payload['mention'])) {
+			$wirePayload['mention'] = $payload['mention'];
+		}
+		if (isset($payload['message']) && is_array($payload['message'])) {
+			$wirePayload['bridgeMessage'] = $payload['message'];
+		}
+		if (isset($payload['occurredAt'])) {
+			$wirePayload['occurredAt'] = $payload['occurredAt'];
+		}
+
+		return $wirePayload;
 	}
 }
