@@ -5,20 +5,21 @@
 1. Implement Nextcloud app bootstrap and Talk listener.
 2. Implement exact mention gating and self-loop prevention.
 3. Implement signed outbound contract to Ironclaw.
-4. Implement durable outbox + retry worker.
+4. Implement synchronous room-type policy (one-to-one bypass, mention-required fallback).
 5. Provide operational docs and validation checklist.
 6. Add unit tests for mention matcher and signature logic.
 
 Exit criteria:
 - Mention-only triggering works.
+- One-to-one/direct rooms can forward without mention.
 - No per-room bot activation required for trigger path.
-- Events survive temporary Ironclaw outage and are retried.
+- Delivery failures are explicit and observable in request-path logs.
 
 ## Phase A.1 (Hardening)
 
 1. Add explicit replay-protection checks on Ironclaw side (timestamp/nonce window).
-2. Add stricter room relevance resolver using stable Talk API if available.
-3. Add metrics endpoint or structured counters for queue depth and failures.
+2. Improve room-type resolution compatibility across Talk versions.
+3. Add metrics endpoint or structured counters for synchronous allow/deny/failure signals.
 4. Add integration test harness with mocked Ironclaw endpoint.
 
 ## Phase B (Optional)

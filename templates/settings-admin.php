@@ -27,7 +27,6 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 	<form method="post" action="<?php p($actionUrl); ?>">
 		<input type="hidden" name="requesttoken" value="<?php p($_['requesttoken']); ?>">
 		<input type="hidden" name="enabled_present" value="1">
-		<input type="hidden" name="strict_membership_present" value="1">
 
 		<p>
 			<input
@@ -37,16 +36,6 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 				value="1"
 				<?php if ($values['enabled']) { p('checked'); } ?>>
 			<label for="ictb_enabled"><strong>Bridge aktivieren</strong></label>
-		</p>
-
-		<p>
-			<input
-				type="checkbox"
-				id="ictb_strict_membership"
-				name="strict_membership_resolver"
-				value="1"
-				<?php if ($values['strict_membership_resolver']) { p('checked'); } ?>>
-			<label for="ictb_strict_membership"><strong>Strikter Membership-Resolver (fail-closed)</strong></label>
 		</p>
 
 		<p>
@@ -78,11 +67,6 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 		<p>
 			<label for="ictb_allowlist"><strong>Raum-Allowlist Tokens (optional, CSV)</strong></label><br>
 			<input type="text" id="ictb_allowlist" name="room_allowlist_tokens" style="width: 100%; max-width: 720px;" value="<?php p($values['room_allowlist_tokens']); ?>" placeholder="token1,token2,token3">
-		</p>
-
-		<p>
-			<label for="ictb_batch"><strong>Dispatch Batch Size</strong></label><br>
-			<input type="number" id="ictb_batch" name="dispatch_batch_size" min="1" max="500" style="width: 140px;" value="<?php p($values['dispatch_batch_size']); ?>">
 		</p>
 
 		<p>

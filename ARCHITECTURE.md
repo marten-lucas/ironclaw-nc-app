@@ -16,34 +16,26 @@ Use `OCA\\Talk\\Events\\ChatMessageSentEvent` as the primary inbound integration
 1. Talk stores chat message.
 2. Talk dispatches `ChatMessageSentEvent`.
 3. App listener receives event.
-4. Listener applies gating:
-   - event type and payload sanity
+4. Listener applies synchronous gating:
    - ignore fake-user self messages
-   - exact mention match
-   - room scope check (allowlist, optional)
-5. Listener builds minimal contract payload.
-6. Payload is inserted into durable outbox (`oc_ic_talk_outbox`).
-7. Dispatcher sends signed request to Ironclaw inbound endpoint.
-8. On `2xx`, outbox row becomes `delivered`; otherwise retry is scheduled.
-9. Ironclaw handles idempotency using `eventId`.
-10. Ironclaw outbound (existing fake-user REST path) replies to same room.
+   - room scope allowlist
+   - room-type policy (one-to-one without mention, others mention-required)
+5. Listener builds signed Nextcloud-compatible webhook payload.
+6. Listener sends directly to Ironclaw with a short opportunistic micro-retry.
+7. Ironclaw handles idempotency using `eventId`.
 
 ## Contract Surface
 
 Stable contract (app -> Ironclaw):
 - HTTP endpoint path and auth headers.
-- Signed payload fields (`eventId`, `roomToken`, `messageId`, `replyTo`, actor, stripped message).
-- Retry semantics: at-least-once delivery with dedupe key.
+- Signed payload fields (`type`, `actor`, `object`, `target`, `eventId`).
 
 Internal coupling explicitly isolated:
 - Mention parsing and room scope logic in dedicated services.
-- Persistence and retry in outbox repository + dispatcher.
 - Talk-specific event class usage confined to one listener.
 
 Current limitation:
-- There is no fully stable public Talk API to ask "is fake user member of this room" from inside this app without extra coupling.
-- Phase A therefore ships with explicit room scope controls (allowlist) and self-loop prevention.
-- Phase A.1 should add a stricter membership resolver once a stable API path is validated.
+- Room type can be unknown on some Talk versions. Unknown is treated fail-closed (mention required).
 
 ## Upgrade Risk Notes
 
@@ -54,7 +46,6 @@ Low/medium risk:
 Mitigations:
 - Keep parser defensive (supports plain and JSON message forms).
 - Keep integration tests around mention detection and payload mapping.
-- Keep fallback operations command to replay outbox after incidents.
 
 ## Rollback Strategy
 

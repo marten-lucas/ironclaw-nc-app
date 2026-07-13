@@ -70,12 +70,10 @@ class AdminSettings implements ISettings {
 			return new TemplateResponse(Application::APP_ID, 'settings-admin', [
 				'values' => [
 					'enabled' => $this->config->getAppValue(Application::APP_ID, 'bridge_enabled', '0') === '1',
-					'strict_membership_resolver' => $this->config->getAppValue(Application::APP_ID, 'strict_membership_resolver', '1') === '1',
 					'ironclaw_inbound_url' => $this->config->getAppValue(Application::APP_ID, 'ironclaw_inbound_url', ''),
 					'fake_user_name' => $fakeUserName,
 					'fake_user_id' => $fakeUserId,
 					'room_allowlist_tokens' => $this->config->getAppValue(Application::APP_ID, 'room_allowlist_tokens', ''),
-					'dispatch_batch_size' => $this->config->getAppValue(Application::APP_ID, 'dispatch_batch_size', '50'),
 					'signature_tolerance_seconds' => $this->config->getAppValue(Application::APP_ID, 'signature_tolerance_seconds', '300'),
 				],
 				'users' => $users,
@@ -92,12 +90,10 @@ class AdminSettings implements ISettings {
 			return new TemplateResponse(Application::APP_ID, 'settings-admin', [
 				'values' => [
 					'enabled' => false,
-					'strict_membership_resolver' => true,
 					'ironclaw_inbound_url' => '',
 					'fake_user_name' => '',
 					'fake_user_id' => '',
 					'room_allowlist_tokens' => '',
-					'dispatch_batch_size' => '50',
 					'signature_tolerance_seconds' => '300',
 				],
 				'users' => [],

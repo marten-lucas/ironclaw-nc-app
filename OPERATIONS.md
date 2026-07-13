@@ -7,18 +7,16 @@
 3. Open Nextcloud Administration Settings -> Basic settings (Server section) and configure "Ironclaw Talk Bridge".
 4. Configure app values:
    - `enabled=1`
-   - `strict_membership_resolver=1`
    - `ironclaw_inbound_url`
    - `ironclaw_shared_secret`
    - `mention_display_name`
    - `fake_user_id` (recommended)
    - `signature_tolerance_seconds=300`
-5. Verify OCC command is available: `ironclaw-talk-bridge:dispatch`.
-6. Verify metrics command is available: `ironclaw-talk-bridge:metrics`.
+5. Verify metrics command is available: `ironclaw-talk-bridge:metrics`.
 
 ## Health Checks
 
-- Outbox backlog should remain near zero under normal operation.
+- New inbound messages should produce synchronous allow/deny decision logs immediately.
 - Repeated non-2xx to Ironclaw should produce structured warning logs.
 - Validate signatures on Ironclaw endpoint and monitor reject rate.
 
@@ -26,31 +24,29 @@
 
 Log events:
 - Event detected
-- Mention match or no-match
-- Self-loop discarded
+- Synchronous routing decision with `decision=allow|deny` and reason
 - Delivery success
-- Delivery failure and retry schedule
+- Delivery failure after micro-retry
 
 Operational counters to derive from logs:
-- queued_events
+- received_events
+- allowed_events
+- denied_events
 - delivered_events
-- retry_events
-- dead_letter_events
+- delivery_failures
 
 ## Failure Modes
 
 Ironclaw down:
-- Events remain queued.
-- Retry job continues until successful delivery.
+- Delivery fails in request path after micro-retry.
+- Failure is logged immediately.
 
 Bad secret/config:
 - Signature validation fails on Ironclaw.
-- Events retry and fail consistently.
-- Rotate secret and re-dispatch queue.
+- Events fail immediately with clear log reason.
+- Rotate secret and retry by sending a new message.
 
 ## Rollback
 
 1. Set `enabled=0` in app config to stop new ingestion.
-2. Keep queue table for forensic analysis.
-3. Re-enable legacy ingress path if needed.
-4. After fix, run dispatch command to replay queued events.
+2. Re-enable legacy ingress path if needed.

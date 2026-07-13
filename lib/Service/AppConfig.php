@@ -45,15 +45,6 @@ class AppConfig {
 		return array_values(array_unique($tokens));
 	}
 
-	public function getDispatchBatchSize(): int {
-		$value = (int)$this->config->getAppValue(Application::APP_ID, 'dispatch_batch_size', '50');
-		return max(1, min(500, $value));
-	}
-
-	public function isStrictMembershipResolverEnabled(): bool {
-		return $this->config->getAppValue(Application::APP_ID, 'strict_membership_resolver', '1') === '1';
-	}
-
 	public function getSignatureToleranceSeconds(): int {
 		$value = (int)$this->config->getAppValue(Application::APP_ID, 'signature_tolerance_seconds', '300');
 		return max(60, min(3600, $value));

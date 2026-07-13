@@ -38,12 +38,9 @@ class SettingsController extends Controller {
 		string $fake_user_id = '',
 		string $ironclaw_shared_secret = '',
 		string $room_allowlist_tokens = '',
-		string $dispatch_batch_size = '50',
 		string $signature_tolerance_seconds = '300',
 		?string $enabled_present = null,
 		?string $enabled = null,
-		?string $strict_membership_present = null,
-		?string $strict_membership_resolver = null,
 	): Response {
 		$trimmedUrl = trim($ironclaw_inbound_url);
 		if ($trimmedUrl === '' || filter_var($trimmedUrl, FILTER_VALIDATE_URL) === false) {
@@ -52,9 +49,6 @@ class SettingsController extends Controller {
 
 		if ($enabled_present !== null) {
 			$this->config->setAppValue(Application::APP_ID, 'bridge_enabled', $enabled !== null ? '1' : '0');
-		}
-		if ($strict_membership_present !== null) {
-			$this->config->setAppValue(Application::APP_ID, 'strict_membership_resolver', $strict_membership_resolver !== null ? '1' : '0');
 		}
 		$this->config->setAppValue(Application::APP_ID, 'ironclaw_inbound_url', $trimmedUrl);
 
@@ -74,9 +68,6 @@ class SettingsController extends Controller {
 		$this->config->setAppValue(Application::APP_ID, 'mention_display_name', $displayName);
 		$this->config->setAppValue(Application::APP_ID, 'fake_user_id', $uid);
 		$this->config->setAppValue(Application::APP_ID, 'room_allowlist_tokens', trim($room_allowlist_tokens));
-
-		$batchSize = max(1, min(500, (int)$dispatch_batch_size));
-		$this->config->setAppValue(Application::APP_ID, 'dispatch_batch_size', (string)$batchSize);
 
 		$tolerance = max(60, min(3600, (int)$signature_tolerance_seconds));
 		$this->config->setAppValue(Application::APP_ID, 'signature_tolerance_seconds', (string)$tolerance);

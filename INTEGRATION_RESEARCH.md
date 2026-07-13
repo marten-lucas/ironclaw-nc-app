@@ -36,5 +36,5 @@ Primaerer Integrationspunkt: `ChatMessageSentEvent`.
 
 - Trigger und Mention-Gating an `ChatMessageSentEvent`.
 - Interne Kopplung auf ein Listener-Modul begrenzt.
-- Outbox + Retry in eigener App-Komponente gekapselt.
+- Direkte synchrone Weiterleitung an Ironclaw (kein Outbox/Worker-Zweig).
 - Ironclaw-Inbound als signierter, idempotenter Contract.
