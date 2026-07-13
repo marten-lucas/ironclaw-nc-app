@@ -21,20 +21,24 @@ Alternatives and why not primary:
 
 - Inbound only in Nextcloud app:
   - Listen to `ChatMessageSentEvent`.
-  - Room-aware gating:
+  - Queue-first routing:
+    - the listener enqueues raw Talk events without DB lookups on `talk_attendees`.
+    - the background dispatcher resolves room metadata later, outside the Talk request transaction.
+  - Room-aware gating in the dispatcher:
     - rooms resolved to `one_to_one` => forward without mention.
     - rooms resolved to `group` or `public` => require mention.
   - Mention matching supports exact `@<fake_user_id>` mentions from Talk UI.
   - Ignore self messages of configured fake user.
   - Build signed event payload and enqueue in durable outbox.
+  - Background dispatch resolves room metadata from Talk DB attendees and then either filters or delivers the event.
   - Retry delivery to Ironclaw on transient failures.
-  - Resolve room metadata from Talk DB attendees with cache-backed dirty-read retry handling.
 - Outbound remains in Ironclaw via fake-user REST path (unchanged).
 
 Note on room relevance in Phase A:
 - The app enforces room scope through configurable allowlist tokens (or all rooms when empty).
 - Self-loop prevention is enforced by `fake_user_id` check.
 - The current resolver verifies fake-user room membership from Talk attendee records and caches the result in Nextcloud memory cache.
+- This DB-backed lookup is intentionally deferred to the background dispatcher to avoid dirty-read stack traces in the Talk message request.
 
 ## App Config (set via Nextcloud app config)
 
@@ -100,14 +104,17 @@ Body shape:
 
 - Durable outbox table stores pending payloads.
 - Unique `eventId` enforces dedupe.
-- Listener tries immediate dispatch.
+- Listener only enqueues.
+- Background dispatch performs room lookup, mention gating, and final forwarding.
+- Events that do not satisfy routing rules are marked as `filtered` in the outbox.
 - Failures are retried with exponential backoff.
 - No event loss on short Ironclaw outages (until max retries policy, configurable in code).
 
 ## Commands and Jobs
 
-- OCC command: `ironclaw-talk-bridge:dispatch` (flush due outbox events)
-- OCC command: `ironclaw-talk-bridge:metrics` (structured counters + outbox state)
+- OCC command: `ironclaw-talk-bridge:dispatch` (run deferred routing and flush due outbox events)
+- OCC command: `ironclaw-talk-bridge:metrics` (structured counters + outbox state, including `filtered`)
+- OCC command: `ironclaw-talk-bridge:diagnose-room` (inspect DB-backed room metadata resolution for a Talk room token)
 - Background job: `RetryQueuedEventsJob` (periodic retry)
 
 ## Integration Harness (Mock Ironclaw)
@@ -129,8 +136,9 @@ It validates:
 1. Fake user is normal room participant.
 2. No per-room Talk webhook bot needed.
 3. Exact mention triggers Ironclaw.
-4. No mention triggers only when the resolved room type is `one_to_one`.
+4. No mention triggers only when the deferred room resolution yields `one_to_one`.
 5. Self messages are ignored.
-6. Reply posted in same room by existing Ironclaw outbound path.
-7. Multiple rooms work in parallel.
-8. Restart of app/Ironclaw does not silently drop queued events.
+6. Events that fail routing rules are marked `filtered` instead of being delivered.
+7. Reply posted in same room by existing Ironclaw outbound path.
+8. Multiple rooms work in parallel.
+9. Restart of app/Ironclaw does not silently drop queued events.

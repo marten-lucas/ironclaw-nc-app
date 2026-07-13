@@ -69,6 +69,16 @@ class OutboxRepository {
 		$query->executeStatement();
 	}
 
+	public function markFiltered(int $id, string $reason): void {
+		$query = $this->db->getQueryBuilder();
+		$query->update('ic_talk_outbox')
+			->set('status', $query->createNamedParameter('filtered'))
+			->set('last_error', $query->createNamedParameter(mb_substr($reason, 0, 4000)))
+			->set('updated_at', $query->createNamedParameter(time()))
+			->where($query->expr()->eq('id', $query->createNamedParameter($id)));
+		$query->executeStatement();
+	}
+
 	public function markRetry(int $id, int $attempts, int $nextAttemptAt, string $error, bool $terminal): void {
 		$status = $terminal ? 'failed' : 'queued';
 		$query = $this->db->getQueryBuilder();
@@ -83,7 +93,7 @@ class OutboxRepository {
 	}
 
 	/**
-	 * @return array{queued:int, delivered:int, failed:int}
+	 * @return array{queued:int, filtered:int, delivered:int, failed:int}
 	 */
 	public function statusCounts(): array {
 		$query = $this->db->getQueryBuilder();
@@ -95,6 +105,7 @@ class OutboxRepository {
 		$result = $query->executeQuery();
 		$counts = [
 			'queued' => 0,
+			'filtered' => 0,
 			'delivered' => 0,
 			'failed' => 0,
 		];

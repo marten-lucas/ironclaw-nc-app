@@ -29,6 +29,7 @@ class ShowBridgeMetrics extends Command {
 
 		$output->writeln('<info>Ironclaw Talk Bridge Metrics</info>');
 		$output->writeln(sprintf('outbox.queued=%d', $counts['queued']));
+		$output->writeln(sprintf('outbox.filtered=%d', $counts['filtered']));
 		$output->writeln(sprintf('outbox.delivered=%d', $counts['delivered']));
 		$output->writeln(sprintf('outbox.failed=%d', $counts['failed']));
 		foreach ($counters as $key => $value) {

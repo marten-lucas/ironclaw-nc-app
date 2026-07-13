@@ -22,7 +22,7 @@ class DiagnoseRoomMetadata extends Command {
 	protected function configure(): void {
 		$this
 			->setName('ironclaw-talk-bridge:diagnose-room')
-			->setDescription('Resolve room metadata for a room token (type, fake-user presence, participants).')
+			->setDescription('Resolve deferred-routing room metadata for a room token (type, fake-user presence, participants).')
 			->addOption('room-token', null, InputOption::VALUE_REQUIRED, 'Talk room token to inspect')
 			->addOption('fake-user-id', null, InputOption::VALUE_OPTIONAL, 'Override configured fake user id');
 	}
