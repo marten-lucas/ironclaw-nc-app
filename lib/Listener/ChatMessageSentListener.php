@@ -8,6 +8,7 @@ use OCA\IronclawTalkBridge\Service\AppConfig;
 use OCA\IronclawTalkBridge\Service\BridgeCounters;
 use OCA\IronclawTalkBridge\Service\IronclawClient;
 use OCA\IronclawTalkBridge\Service\MentionMatcher;
+use OCA\IronclawTalkBridge\Service\TalkParticipantInspector;
 use OCA\IronclawTalkBridge\Service\RoomForwardingPolicy;
 use OCA\IronclawTalkBridge\Service\RoomScopeService;
 use OCA\IronclawTalkBridge\Service\TalkEventMapper;
@@ -25,6 +26,7 @@ class ChatMessageSentListener implements IEventListener {
 		private TalkEventMapper $mapper,
 		private RoomScopeService $roomScope,
 		private MentionMatcher $mentionMatcher,
+		private TalkParticipantInspector $participantInspector,
 		private RoomForwardingPolicy $forwardingPolicy,
 		private IronclawClient $client,
 		private BridgeCounters $counters,
@@ -97,6 +99,7 @@ class ChatMessageSentListener implements IEventListener {
 		$roomType = $this->resolveRoomType($event->getRoom());
 		$forwardingDecision = $this->forwardingPolicy->decide($roomType);
 		$requiresMention = (bool)($forwardingDecision['requiresMention'] ?? true);
+		$matchedBy = (string)($forwardingDecision['matchedBy'] ?? 'mention');
 		$mentionDisplayName = $this->config->getMentionDisplayName();
 		$hasMention = $this->mentionMatcher->containsMention(
 			$rawMessage,
@@ -106,6 +109,17 @@ class ChatMessageSentListener implements IEventListener {
 		);
 
 		if ($requiresMention && !$hasMention) {
+			$twoParticipantRoom = $this->participantInspector->isTwoParticipantRoomWithFakeUser($roomToken, $fakeUserId);
+			if ($twoParticipantRoom === true) {
+				$requiresMention = false;
+				$matchedBy = 'two_participant_room_with_fake_user';
+				$this->logger->debug('Participant inspector overrode mention requirement for two-participant room', [
+					'app' => 'ironclaw_talk_bridge',
+					'eventId' => $payload['eventId'] ?? null,
+					'roomToken' => $roomToken,
+					'roomType' => $roomType,
+				]);
+			} else {
 			$this->counters->increment(BridgeCounters::KEY_EVENTS_DENIED);
 			$this->counters->increment(BridgeCounters::KEY_MENTION_MISSES);
 			$this->logDecision('deny', 'mention_required_missing', [
@@ -117,6 +131,7 @@ class ChatMessageSentListener implements IEventListener {
 				'messagePreview' => $messagePreview,
 			]);
 			return;
+			}
 		}
 
 		$payload['room']['type'] = $roomType;
@@ -124,7 +139,7 @@ class ChatMessageSentListener implements IEventListener {
 		$payload['room']['fakeUserInRoom'] = true;
 		$payload['mention'] = [
 			'displayName' => $mentionDisplayName,
-			'matchedBy' => (string)($forwardingDecision['matchedBy'] ?? 'mention'),
+			'matchedBy' => $matchedBy,
 		];
 		$payload['message']['stripped'] = $this->mentionMatcher->stripExactMention($rawMessage, $mentionDisplayName);
 
@@ -135,7 +150,7 @@ class ChatMessageSentListener implements IEventListener {
 			'roomType' => $roomType,
 			'requiresMention' => $requiresMention,
 			'hasMention' => $hasMention,
-			'matchedBy' => (string)($forwardingDecision['matchedBy'] ?? 'mention'),
+			'matchedBy' => $matchedBy,
 			'messagePreview' => $messagePreview,
 		]);
 
