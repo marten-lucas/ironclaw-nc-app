@@ -44,23 +44,19 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 		</p>
 
 		<p>
-			<label for="ictb_fake_user_id"><strong>Fake User ID</strong></label><br>
-			<input list="ictb_fake_user_id_list" type="text" id="ictb_fake_user_id" name="fake_user_id" required style="width: 100%; max-width: 480px;" value="<?php p($values['fake_user_id']); ?>" placeholder="z.B. ki_assistent">
-			<datalist id="ictb_fake_user_id_list">
+			<label for="ictb_fake_user_id"><strong>Fake User (Name + ID)</strong></label><br>
+			<input type="text" id="ictb_fake_user_name" name="fake_user_name" readonly style="width: 100%; max-width: 480px; margin-bottom: 8px;" value="<?php p($values['fake_user_name']); ?>" placeholder="Display Name wird aus ID aufgeloest">
+			<select id="ictb_fake_user_id" name="fake_user_id" required style="width: 100%; max-width: 480px;">
+				<option value="">Bitte Benutzer waehlen</option>
 				<?php foreach ($users as $user): ?>
-					<option value="<?php p((string)$user['uid']); ?>"><?php p((string)$user['displayName']); ?></option>
+					<option
+						value="<?php p((string)$user['uid']); ?>"
+						data-display-name="<?php p((string)$user['displayName']); ?>"
+						<?php if ((string)$values['fake_user_id'] === (string)$user['uid']) { p('selected'); } ?>>
+						<?php p((string)$user['displayName'] . ' (' . (string)$user['uid'] . ')'); ?>
+					</option>
 				<?php endforeach; ?>
-			</datalist>
-		</p>
-
-		<p>
-			<label for="ictb_fake_user_name"><strong>Fake User Name (mention_display_name)</strong></label><br>
-			<input list="ictb_fake_user_name_list" type="text" id="ictb_fake_user_name" name="fake_user_name" required style="width: 100%; max-width: 480px;" value="<?php p($values['fake_user_name']); ?>" placeholder="z.B. KI Gerda">
-			<datalist id="ictb_fake_user_name_list">
-				<?php foreach ($users as $user): ?>
-					<option value="<?php p((string)$user['displayName']); ?>"><?php p((string)$user['uid']); ?></option>
-				<?php endforeach; ?>
-			</datalist>
+			</select>
 		</p>
 
 		<p>
@@ -99,9 +95,20 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 	const result = document.getElementById('ictb_test_result');
 	const saveResult = document.getElementById('ictb_save_result');
 	const urlInput = document.getElementById('ictb_ironclaw_url');
-	if (!formEl || !button || !result || !saveResult || !urlInput) {
+	const fakeUserSelect = document.getElementById('ictb_fake_user_id');
+	const fakeUserNameInput = document.getElementById('ictb_fake_user_name');
+	if (!formEl || !button || !result || !saveResult || !urlInput || !fakeUserSelect || !fakeUserNameInput) {
 		return;
 	}
+
+	const syncFakeUserName = function () {
+		const selected = fakeUserSelect.options[fakeUserSelect.selectedIndex];
+		const displayName = selected ? String(selected.getAttribute('data-display-name') || '') : '';
+		fakeUserNameInput.value = displayName;
+	};
+
+	fakeUserSelect.addEventListener('change', syncFakeUserName);
+	syncFakeUserName();
 
 	const requestToken = <?php echo json_encode((string)$_['requesttoken']); ?>;
 
