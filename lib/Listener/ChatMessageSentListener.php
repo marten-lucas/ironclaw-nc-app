@@ -253,28 +253,120 @@ class ChatMessageSentListener implements IEventListener {
 			'target' => [
 				'id' => $roomToken,
 				'name' => $roomName,
-				'displayName' => $roomName,
-				'roomName' => $roomName,
 			],
 		];
 
 		if ($eventId !== '') {
 			$wirePayload['eventId'] = $eventId;
 		}
-		if (isset($payload['room']) && is_array($payload['room'])) {
-			$wirePayload['room'] = $payload['room'];
+		$mention = $this->canonicalMentionSection($payload);
+		if ($mention !== null) {
+			$wirePayload['mention'] = $mention;
 		}
-		if (isset($payload['mention']) && is_array($payload['mention'])) {
-			$wirePayload['mention'] = $payload['mention'];
+
+		$bridgeMessage = $this->canonicalBridgeMessageSection($payload);
+		if ($bridgeMessage !== null) {
+			$wirePayload['bridgeMessage'] = $bridgeMessage;
 		}
-		if (isset($payload['message']) && is_array($payload['message'])) {
-			$wirePayload['bridgeMessage'] = $payload['message'];
-		}
+
 		if (isset($payload['occurredAt'])) {
 			$wirePayload['occurredAt'] = $payload['occurredAt'];
 		}
 
 		return $wirePayload;
+	}
+
+	/**
+	 * @param array<string,mixed> $payload
+	 * @return array<string,mixed>|null
+	 */
+	private function canonicalMentionSection(array $payload): ?array {
+		if (!isset($payload['mention']) || !is_array($payload['mention'])) {
+			return null;
+		}
+
+		$mention = $payload['mention'];
+		$userId = trim((string)($mention['userId'] ?? ''));
+		if ($userId === '') {
+			return null;
+		}
+
+		$normalized = ['userId' => $userId];
+		$displayName = trim((string)($mention['displayName'] ?? ''));
+		if ($displayName !== '') {
+			$normalized['displayName'] = $displayName;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<string,mixed> $payload
+	 * @return array<string,mixed>|null
+	 */
+	private function canonicalBridgeMessageSection(array $payload): ?array {
+		if (!isset($payload['message']) || !is_array($payload['message'])) {
+			return null;
+		}
+
+		$message = $payload['message'];
+		$raw = trim((string)($message['raw'] ?? ''));
+		$entities = $this->canonicalMentionEntities($message['mentionEntities'] ?? null);
+
+		if ($raw === '' && $entities === []) {
+			return null;
+		}
+
+		$normalized = [];
+		if ($raw !== '') {
+			$normalized['raw'] = $raw;
+		}
+		if ($entities !== []) {
+			$normalized['mentionEntities'] = $entities;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function canonicalMentionEntities(mixed $rawEntities): array {
+		if (!is_array($rawEntities)) {
+			return [];
+		}
+
+		$normalized = [];
+		foreach ($rawEntities as $entity) {
+			if (!is_array($entity)) {
+				continue;
+			}
+
+			$item = [];
+			$token = trim((string)($entity['token'] ?? ''));
+			$id = trim((string)($entity['id'] ?? ''));
+			$name = trim((string)($entity['name'] ?? ''));
+			$isBot = (bool)($entity['isBot'] ?? false);
+
+			if ($token !== '') {
+				$item['token'] = $token;
+			}
+			if ($id !== '') {
+				$item['id'] = $id;
+			}
+			if ($name !== '') {
+				$item['name'] = $name;
+			}
+			if ($isBot) {
+				$item['isBot'] = true;
+			}
+
+			if ($item !== []) {
+				$normalized[] = $item;
+			}
+		}
+
+		return array_values($normalized);
 	}
 
 	/**
