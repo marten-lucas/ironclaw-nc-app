@@ -142,6 +142,12 @@ class ChatMessageSentListener implements IEventListener {
 			'matchedBy' => $matchedBy,
 		];
 		$payload['message']['stripped'] = $this->mentionMatcher->stripExactMention($rawMessage, $mentionDisplayName);
+		$payload['message']['mentionEntities'] = $this->extractBotMentionEntities(
+			$rawMessage,
+			is_array($payload['message']['parameters'] ?? null) ? $payload['message']['parameters'] : [],
+			$mentionDisplayName,
+			$fakeUserId,
+		);
 
 		$this->counters->increment(BridgeCounters::KEY_EVENTS_ALLOWED);
 		$this->logDecision('allow', 'forward_to_ironclaw', [
@@ -219,16 +225,10 @@ class ChatMessageSentListener implements IEventListener {
 		$message = is_array($payload['message'] ?? null) ? $payload['message'] : [];
 		$rawMessage = trim((string)($message['raw'] ?? ''));
 		$strippedMessage = trim((string)($message['stripped'] ?? ''));
-		$contentText = $strippedMessage !== '' ? $strippedMessage : $rawMessage;
-
-		$mentionDisplayName = ltrim($this->config->getMentionDisplayName(), '@');
-		$mentionToken = $mentionDisplayName !== '' ? '@' . $mentionDisplayName : '';
-		if ($mentionToken !== '' && strpos($contentText, $mentionToken) === false) {
-			$contentText = trim($mentionToken . ' ' . $contentText);
-		}
+		$contentText = $rawMessage !== '' ? $rawMessage : $strippedMessage;
 
 		if ($contentText === '') {
-			$contentText = $mentionToken !== '' ? $mentionToken : 'ping';
+			$contentText = 'ping';
 		}
 
 		$wirePayload = [
@@ -264,6 +264,80 @@ class ChatMessageSentListener implements IEventListener {
 		}
 
 		return $wirePayload;
+	}
+
+	/**
+	 * @param array<mixed> $messageParameters
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function extractBotMentionEntities(
+		string $rawMessage,
+		array $messageParameters,
+		string $mentionDisplayName,
+		string $fakeUserId
+	): array {
+		$mentionDisplayName = ltrim(trim($mentionDisplayName), '@');
+		$fakeUserId = ltrim(trim($fakeUserId), '@');
+
+		$candidateTokens = [];
+		if ($mentionDisplayName !== '') {
+			$candidateTokens[] = '@' . $mentionDisplayName;
+		}
+		if ($fakeUserId !== '') {
+			$candidateTokens[] = '@' . $fakeUserId;
+		}
+
+		foreach ($messageParameters as $value) {
+			if (!is_array($value)) {
+				continue;
+			}
+			$type = strtolower(trim((string)($value['type'] ?? '')));
+			if ($type !== '' && !in_array($type, ['user', 'users', 'mention'], true)) {
+				continue;
+			}
+
+			$candidateId = ltrim(trim((string)($value['id'] ?? $value['actorId'] ?? '')), '@');
+			$candidateName = ltrim(trim((string)($value['name'] ?? $value['label'] ?? $value['displayName'] ?? '')), '@');
+
+			$isBotById = $fakeUserId !== '' && $candidateId !== '' && strcasecmp($candidateId, $fakeUserId) === 0;
+			$isBotByName = $mentionDisplayName !== '' && $candidateName !== '' && strcasecmp($candidateName, $mentionDisplayName) === 0;
+			if (!$isBotById && !$isBotByName) {
+				continue;
+			}
+
+			if ($candidateName !== '') {
+				$candidateTokens[] = '@' . $candidateName;
+			}
+			if ($candidateId !== '') {
+				$candidateTokens[] = '@' . $candidateId;
+			}
+		}
+
+		$entities = [];
+		$seen = [];
+		foreach ($candidateTokens as $token) {
+			$token = trim((string)$token);
+			if ($token === '' || isset($seen[$token])) {
+				continue;
+			}
+			if (!$this->containsMentionToken($rawMessage, $token)) {
+				continue;
+			}
+
+			$entities[] = [
+				'token' => $token,
+				'isBot' => true,
+			];
+			$seen[$token] = true;
+		}
+
+		return $entities;
+	}
+
+	private function containsMentionToken(string $message, string $token): bool {
+		$escaped = preg_quote($token, '/');
+		$pattern = '/(^|[\s])' . $escaped . '(?=$|[\s\.,:;!?])/u';
+		return preg_match($pattern, $message) === 1;
 	}
 
 	private function resolveRoomType(object $room): string {
