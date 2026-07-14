@@ -27,6 +27,10 @@ class AppConfig {
 		return trim($this->config->getAppValue(Application::APP_ID, 'mention_display_name', ''));
 	}
 
+	public function getFakeUserName(): string {
+		return $this->getMentionDisplayName();
+	}
+
 	public function getFakeUserId(): string {
 		return trim($this->config->getAppValue(Application::APP_ID, 'fake_user_id', ''));
 	}
@@ -53,6 +57,7 @@ class AppConfig {
 	public function isReadyForDelivery(): bool {
 		return $this->getIronclawInboundUrl() !== ''
 			&& $this->getSharedSecret() !== ''
-			&& $this->getMentionDisplayName() !== '';
+			&& $this->getFakeUserId() !== ''
+			&& $this->getFakeUserName() !== '';
 	}
 }

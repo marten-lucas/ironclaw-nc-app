@@ -101,10 +101,11 @@ class ChatMessageSentListener implements IEventListener {
 		$requiresMention = (bool)($forwardingDecision['requiresMention'] ?? true);
 		$matchedBy = (string)($forwardingDecision['matchedBy'] ?? 'mention');
 		$mentionDisplayName = $this->config->getMentionDisplayName();
+		$fakeUserName = $this->config->getFakeUserName();
 		$hasMention = $this->mentionMatcher->containsMention(
 			$rawMessage,
 			is_array($payload['message']['parameters'] ?? null) ? $payload['message']['parameters'] : [],
-			$mentionDisplayName,
+			$fakeUserName,
 			$fakeUserId,
 		);
 
@@ -138,14 +139,19 @@ class ChatMessageSentListener implements IEventListener {
 		$payload['room']['detectionMethod'] = 'event_room_type';
 		$payload['room']['fakeUserInRoom'] = true;
 		$payload['mention'] = [
-			'displayName' => $mentionDisplayName,
+			'displayName' => $fakeUserName,
+			'userId' => $fakeUserId,
 			'matchedBy' => $matchedBy,
 		];
-		$payload['message']['stripped'] = $this->mentionMatcher->stripExactMention($rawMessage, $mentionDisplayName);
+		$payload['message']['stripped'] = $this->mentionMatcher->stripMentionsForFakeUser(
+			$rawMessage,
+			$fakeUserName,
+			$fakeUserId,
+		);
 		$payload['message']['mentionEntities'] = $this->extractBotMentionEntities(
 			$rawMessage,
 			is_array($payload['message']['parameters'] ?? null) ? $payload['message']['parameters'] : [],
-			$mentionDisplayName,
+			$fakeUserName,
 			$fakeUserId,
 		);
 
@@ -226,6 +232,8 @@ class ChatMessageSentListener implements IEventListener {
 		$rawMessage = trim((string)($message['raw'] ?? ''));
 		$strippedMessage = trim((string)($message['stripped'] ?? ''));
 		$contentText = $rawMessage !== '' ? $rawMessage : $strippedMessage;
+		$room = is_array($payload['room'] ?? null) ? $payload['room'] : [];
+		$roomName = trim((string)($room['displayName'] ?? $room['name'] ?? $room['roomName'] ?? ''));
 
 		if ($contentText === '') {
 			$contentText = 'ping';
@@ -244,6 +252,9 @@ class ChatMessageSentListener implements IEventListener {
 			],
 			'target' => [
 				'id' => $roomToken,
+				'name' => $roomName,
+				'displayName' => $roomName,
+				'roomName' => $roomName,
 			],
 		];
 

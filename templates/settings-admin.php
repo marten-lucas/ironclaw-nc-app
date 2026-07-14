@@ -44,17 +44,23 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 		</p>
 
 		<p>
-			<label for="ictb_fake_user_id"><strong>Fake User (Name + ID)</strong></label><br>
-			<select id="ictb_fake_user_id" name="fake_user_id" required style="width: 100%; max-width: 480px;">
-				<option value="">Bitte Benutzer waehlen</option>
+			<label for="ictb_fake_user_id"><strong>Fake User ID</strong></label><br>
+			<input list="ictb_fake_user_id_list" type="text" id="ictb_fake_user_id" name="fake_user_id" required style="width: 100%; max-width: 480px;" value="<?php p($values['fake_user_id']); ?>" placeholder="z.B. ki_assistent">
+			<datalist id="ictb_fake_user_id_list">
 				<?php foreach ($users as $user): ?>
-					<option
-						value="<?php p((string)$user['uid']); ?>"
-						<?php if ((string)$values['fake_user_id'] === (string)$user['uid']) { p('selected'); } ?>>
-						<?php p((string)$user['displayName'] . ' (' . (string)$user['uid'] . ')'); ?>
-					</option>
+					<option value="<?php p((string)$user['uid']); ?>"><?php p((string)$user['displayName']); ?></option>
 				<?php endforeach; ?>
-			</select>
+			</datalist>
+		</p>
+
+		<p>
+			<label for="ictb_fake_user_name"><strong>Fake User Name (mention_display_name)</strong></label><br>
+			<input list="ictb_fake_user_name_list" type="text" id="ictb_fake_user_name" name="fake_user_name" required style="width: 100%; max-width: 480px;" value="<?php p($values['fake_user_name']); ?>" placeholder="z.B. KI Gerda">
+			<datalist id="ictb_fake_user_name_list">
+				<?php foreach ($users as $user): ?>
+					<option value="<?php p((string)$user['displayName']); ?>"><?php p((string)$user['uid']); ?></option>
+				<?php endforeach; ?>
+			</datalist>
 		</p>
 
 		<p>

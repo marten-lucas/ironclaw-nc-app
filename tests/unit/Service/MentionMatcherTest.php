@@ -37,4 +37,16 @@ class MentionMatcherTest extends TestCase {
 			'ki_assistent'
 		));
 	}
+
+	public function testStripMentionsForFakeUserRemovesNameAndId(): void {
+		$matcher = new MentionMatcher();
+		self::assertSame(
+			'Es ist 10:01. antworte mit OK',
+			$matcher->stripMentionsForFakeUser(
+				'@KI Gerda @ki_assistent Es ist 10:01. antworte mit OK',
+				'KI Gerda',
+				'ki_assistent'
+			)
+		);
+	}
 }

@@ -51,6 +51,27 @@ class MentionMatcher {
 		return trim((string)$stripped);
 	}
 
+	public function stripMentionsForFakeUser(
+		string $message,
+		string $displayName,
+		string $fakeUserId = ''
+	): string {
+		$result = $this->stripExactMention($message, $displayName);
+		$fakeUserId = trim($fakeUserId);
+		if ($fakeUserId === '') {
+			return $result;
+		}
+
+		$escaped = preg_quote($fakeUserId, '/');
+		$pattern = '/(^|[\s])@' . $escaped . '(?=$|[\s\.,:;!?])/iu';
+		$stripped = preg_replace($pattern, ' ', $result);
+		if (!is_string($stripped)) {
+			return $result;
+		}
+		$stripped = preg_replace('/\s+/u', ' ', $stripped);
+		return trim((string)$stripped);
+	}
+
 	private function buildPattern(string $displayName): string {
 		$escaped = preg_quote($displayName, '/');
 		return '/(^|[\s])@' . $escaped . '(?=$|[\s\.,:;!?])/u';

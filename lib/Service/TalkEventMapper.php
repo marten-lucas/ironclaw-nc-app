@@ -15,6 +15,7 @@ class TalkEventMapper {
 		$comment = $event->getComment();
 		$room = $event->getRoom();
 		$roomToken = method_exists($room, 'getToken') ? (string)$room->getToken() : '';
+		$roomName = $this->resolveRoomName($room);
 		$messageId = (int)$comment->getId();
 		$messageData = $this->extractMessageData((string)$comment->getMessage());
 
@@ -43,6 +44,9 @@ class TalkEventMapper {
 				'displayName' => method_exists($comment, 'getActorDisplayName') ? (string)$comment->getActorDisplayName() : '',
 			],
 			'room' => [
+				'name' => $roomName,
+				'displayName' => $roomName,
+				'roomName' => $roomName,
 				'type' => RoomForwardingPolicy::ROOM_TYPE_UNKNOWN,
 				'detectionMethod' => 'event_minimal',
 				'fakeUserInRoom' => false,
@@ -54,6 +58,24 @@ class TalkEventMapper {
 			],
 			'occurredAt' => $occurredAt->format(DATE_ATOM),
 		];
+	}
+
+	private function resolveRoomName(object $room): string {
+		$methods = ['getDisplayName', 'getName'];
+		foreach ($methods as $method) {
+			if (!method_exists($room, $method)) {
+				continue;
+			}
+			try {
+				$value = trim((string)$room->{$method}());
+				if ($value !== '') {
+					return $value;
+				}
+			} catch (\Throwable) {
+			}
+		}
+
+		return '';
 	}
 
 	/**

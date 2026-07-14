@@ -36,6 +36,7 @@ class SettingsController extends Controller {
 	public function save(
 		string $ironclaw_inbound_url,
 		string $fake_user_id = '',
+		string $fake_user_name = '',
 		string $ironclaw_shared_secret = '',
 		string $room_allowlist_tokens = '',
 		string $signature_tolerance_seconds = '300',
@@ -53,19 +54,12 @@ class SettingsController extends Controller {
 		$this->config->setAppValue(Application::APP_ID, 'ironclaw_inbound_url', $trimmedUrl);
 
 		$uid = trim($fake_user_id);
-		$displayName = '';
-		if ($uid !== '') {
-			$user = $this->userManager->get($uid);
-			if ($user !== null) {
-				$displayName = (string)$user->getDisplayName();
-			}
+		$resolvedDisplayName = trim($fake_user_name);
+		if ($uid === '' || $resolvedDisplayName === '') {
+			return $this->saveError('Fake User ID und Fake User Name muessen gesetzt sein.', 400);
 		}
 
-		if ($uid === '' || $displayName === '') {
-			return $this->saveError('Fake User ist ungueltig oder nicht vorhanden.', 400);
-		}
-
-		$this->config->setAppValue(Application::APP_ID, 'mention_display_name', $displayName);
+		$this->config->setAppValue(Application::APP_ID, 'mention_display_name', $resolvedDisplayName);
 		$this->config->setAppValue(Application::APP_ID, 'fake_user_id', $uid);
 		$this->config->setAppValue(Application::APP_ID, 'room_allowlist_tokens', trim($room_allowlist_tokens));
 
