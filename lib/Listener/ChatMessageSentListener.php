@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\IronclawTalkBridge\Listener;
 
 use OCA\IronclawTalkBridge\Service\AppConfig;
+use OCA\IronclawTalkBridge\Service\AttachmentContextBuilder;
 use OCA\IronclawTalkBridge\Service\BridgeCounters;
 use OCA\IronclawTalkBridge\Service\IronclawClient;
 use OCA\IronclawTalkBridge\Service\MentionMatcher;
@@ -26,6 +27,7 @@ class ChatMessageSentListener implements IEventListener {
 		private TalkEventMapper $mapper,
 		private RoomScopeService $roomScope,
 		private MentionMatcher $mentionMatcher,
+		private AttachmentContextBuilder $attachmentContextBuilder,
 		private TalkParticipantInspector $participantInspector,
 		private RoomForwardingPolicy $forwardingPolicy,
 		private IronclawClient $client,
@@ -155,6 +157,15 @@ class ChatMessageSentListener implements IEventListener {
 			$fakeUserId,
 		);
 
+		$attachmentResult = $this->attachmentContextBuilder->enrichForActor(
+			is_array($payload['message']['attachments'] ?? null) ? $payload['message']['attachments'] : [],
+			$actorId,
+		);
+		$payload['message']['attachments'] = $attachmentResult['attachments'];
+		if (($attachmentResult['errors'] ?? []) !== []) {
+			$payload['message']['attachmentErrors'] = $attachmentResult['errors'];
+		}
+
 		$this->counters->increment(BridgeCounters::KEY_EVENTS_ALLOWED);
 		$this->logDecision('allow', 'forward_to_ironclaw', [
 			'eventId' => $payload['eventId'] ?? null,
@@ -234,9 +245,34 @@ class ChatMessageSentListener implements IEventListener {
 		$contentText = $rawMessage !== '' ? $rawMessage : $strippedMessage;
 		$room = is_array($payload['room'] ?? null) ? $payload['room'] : [];
 		$roomName = trim((string)($room['displayName'] ?? $room['name'] ?? $room['roomName'] ?? ''));
+		$attachmentErrors = $this->canonicalAttachmentErrors($payload);
+		$attachments = $this->canonicalAttachments($payload);
 
 		if ($contentText === '') {
-			$contentText = 'ping';
+			if ($attachments !== []) {
+				$contentText = 'Please analyze the provided attachments.';
+			} elseif ($attachmentErrors !== []) {
+				$contentText = 'Attachment processing failed. Please check attachmentErrors for details.';
+			} else {
+				$contentText = 'ping';
+			}
+		}
+
+		$objectPayload = [
+			'id' => $messageId,
+			'content' => $contentText,
+		];
+
+		$replyTo = (int)($payload['replyTo'] ?? 0);
+		if ($replyTo > 0) {
+			$objectPayload['replyTo'] = $replyTo;
+		}
+
+		if ($attachments !== []) {
+			$objectPayload['attachments'] = $attachments;
+		}
+		if ($attachmentErrors !== []) {
+			$objectPayload['attachmentErrors'] = $attachmentErrors;
 		}
 
 		$wirePayload = [
@@ -246,10 +282,7 @@ class ChatMessageSentListener implements IEventListener {
 				'id' => $actorId,
 				'name' => $actorName,
 			],
-			'object' => [
-				'id' => $messageId,
-				'content' => $contentText,
-			],
+			'object' => $objectPayload,
 			'target' => [
 				'id' => $roomToken,
 				'name' => $roomName,
@@ -267,6 +300,11 @@ class ChatMessageSentListener implements IEventListener {
 		$bridgeMessage = $this->canonicalBridgeMessageSection($payload);
 		if ($bridgeMessage !== null) {
 			$wirePayload['bridgeMessage'] = $bridgeMessage;
+		}
+
+		$replyContext = $this->canonicalReplyContext($payload['replyContext'] ?? null);
+		if ($replyContext !== null) {
+			$wirePayload['replyContext'] = $replyContext;
 		}
 
 		if (isset($payload['occurredAt'])) {
@@ -312,8 +350,10 @@ class ChatMessageSentListener implements IEventListener {
 		$message = $payload['message'];
 		$raw = trim((string)($message['raw'] ?? ''));
 		$entities = $this->canonicalMentionEntities($message['mentionEntities'] ?? null);
+		$attachments = $this->canonicalAttachmentList($message['attachments'] ?? null);
+		$attachmentErrors = $this->canonicalAttachmentErrorList($message['attachmentErrors'] ?? null);
 
-		if ($raw === '' && $entities === []) {
+		if ($raw === '' && $entities === [] && $attachments === [] && $attachmentErrors === []) {
 			return null;
 		}
 
@@ -323,6 +363,135 @@ class ChatMessageSentListener implements IEventListener {
 		}
 		if ($entities !== []) {
 			$normalized['mentionEntities'] = $entities;
+		}
+		if ($attachments !== []) {
+			$normalized['attachments'] = $attachments;
+		}
+		if ($attachmentErrors !== []) {
+			$normalized['attachmentErrors'] = $attachmentErrors;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @param array<string,mixed> $payload
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function canonicalAttachments(array $payload): array {
+		if (!isset($payload['message']) || !is_array($payload['message'])) {
+			return [];
+		}
+
+		return $this->canonicalAttachmentList($payload['message']['attachments'] ?? null);
+	}
+
+	/**
+	 * @param array<string,mixed> $payload
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function canonicalAttachmentErrors(array $payload): array {
+		if (!isset($payload['message']) || !is_array($payload['message'])) {
+			return [];
+		}
+
+		return $this->canonicalAttachmentErrorList($payload['message']['attachmentErrors'] ?? null);
+	}
+
+	/**
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function canonicalAttachmentList(mixed $value): array {
+		if (!is_array($value)) {
+			return [];
+		}
+
+		$normalized = [];
+		foreach ($value as $attachment) {
+			if (!is_array($attachment)) {
+				continue;
+			}
+
+			$entry = [];
+			foreach (['slot', 'sourceType', 'name', 'id', 'fileId', 'mimeType', 'path', 'link', 'sizeBytes', 'downloadSource', 'extract', 'raw'] as $key) {
+				if (!array_key_exists($key, $attachment)) {
+					continue;
+				}
+				$entry[$key] = $attachment[$key];
+			}
+
+			if ($entry !== []) {
+				$normalized[] = $entry;
+			}
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function canonicalAttachmentErrorList(mixed $value): array {
+		if (!is_array($value)) {
+			return [];
+		}
+
+		$normalized = [];
+		foreach ($value as $error) {
+			if (!is_array($error)) {
+				continue;
+			}
+
+			$entry = [];
+			foreach (['attachmentName', 'attachmentId', 'code', 'message'] as $key) {
+				if (!array_key_exists($key, $error)) {
+					continue;
+				}
+				$entry[$key] = (string)$error[$key];
+			}
+
+			if (($entry['code'] ?? '') !== '') {
+				$normalized[] = $entry;
+			}
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * @return array<string,mixed>|null
+	 */
+	private function canonicalReplyContext(mixed $replyContext): ?array {
+		if (!is_array($replyContext)) {
+			return null;
+		}
+
+		$parentMessageId = (int)($replyContext['parentMessageId'] ?? 0);
+		if ($parentMessageId <= 0) {
+			return null;
+		}
+
+		$normalized = ['parentMessageId' => $parentMessageId];
+		if (isset($replyContext['parentMessage']) && is_array($replyContext['parentMessage'])) {
+			$parentMessage = $replyContext['parentMessage'];
+			$normalizedParent = [];
+			$raw = trim((string)($parentMessage['raw'] ?? ''));
+			if ($raw !== '') {
+				$normalizedParent['raw'] = $raw;
+			}
+			if (isset($parentMessage['parameters']) && is_array($parentMessage['parameters'])) {
+				$normalizedParent['parameters'] = $parentMessage['parameters'];
+			}
+			if (isset($parentMessage['actor']) && is_array($parentMessage['actor'])) {
+				$normalizedParent['actor'] = [
+					'type' => trim((string)($parentMessage['actor']['type'] ?? '')),
+					'id' => trim((string)($parentMessage['actor']['id'] ?? '')),
+					'displayName' => trim((string)($parentMessage['actor']['displayName'] ?? '')),
+				];
+			}
+			if ($normalizedParent !== []) {
+				$normalized['parentMessage'] = $normalizedParent;
+			}
 		}
 
 		return $normalized;

@@ -8,6 +8,7 @@
 
 $values = $_['values'];
 $users = $_['users'] ?? [];
+$reactionApprovalSelected = array_fill_keys($values['reaction_approval_user_id_list'] ?? [], true);
 $uiStatus = $_['uiStatus'] ?? '';
 $uiMessage = $_['uiMessage'] ?? '';
 $actionUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Settings.save');
@@ -77,6 +78,55 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 		</p>
 
 		<p>
+			<label for="ictb_reaction_approval_user_ids_list"><strong>Reaction Approval Users (HITL ✅/❌)</strong></label><br>
+			<input type="hidden" id="ictb_reaction_approval_user_ids" name="reaction_approval_user_ids" value="<?php p($values['reaction_approval_user_ids']); ?>">
+			<select id="ictb_reaction_approval_user_ids_list" name="reaction_approval_user_ids_list[]" multiple size="8" style="width: 100%; max-width: 720px;">
+				<?php foreach ($users as $user): ?>
+					<option
+						value="<?php p((string)$user['uid']); ?>"
+						<?php if (isset($reactionApprovalSelected[(string)$user['uid']])) { p('selected'); } ?>>
+						<?php p((string)$user['displayName'] . ' (' . (string)$user['uid'] . ')'); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
+			<br>
+			<em>Nur diese Benutzer duerfen HITL-Reaktionen ✅/❌ autorisieren.</em>
+		</p>
+
+		<hr style="max-width: 720px; margin: 16px 0;">
+		<h3 style="margin: 0 0 12px;">Anhang-Verarbeitung (serverseitig)</h3>
+
+		<p>
+			<label for="ictb_attachment_allowed_mime_patterns"><strong>Erlaubte MIME-Patterns (CSV)</strong></label><br>
+			<input type="text" id="ictb_attachment_allowed_mime_patterns" name="attachment_allowed_mime_patterns" style="width: 100%; max-width: 720px;" value="<?php p($values['attachment_allowed_mime_patterns']); ?>" placeholder="text/*,application/pdf,image/*">
+		</p>
+
+		<p>
+			<label for="ictb_attachment_max_file_size_bytes"><strong>Max. Dateigroesse pro Anhang (Bytes)</strong></label><br>
+			<input type="number" id="ictb_attachment_max_file_size_bytes" name="attachment_max_file_size_bytes" min="65536" max="104857600" style="width: 220px;" value="<?php p($values['attachment_max_file_size_bytes']); ?>">
+		</p>
+
+		<p>
+			<label for="ictb_attachment_max_total_size_bytes"><strong>Max. Gesamtgroesse pro Nachricht (Bytes)</strong></label><br>
+			<input type="number" id="ictb_attachment_max_total_size_bytes" name="attachment_max_total_size_bytes" min="65536" max="524288000" style="width: 220px;" value="<?php p($values['attachment_max_total_size_bytes']); ?>">
+		</p>
+
+		<p>
+			<label for="ictb_attachment_max_extract_chars"><strong>Max. extrahierte Zeichen pro Anhang</strong></label><br>
+			<input type="number" id="ictb_attachment_max_extract_chars" name="attachment_max_extract_chars" min="1000" max="200000" style="width: 220px;" value="<?php p($values['attachment_max_extract_chars']); ?>">
+		</p>
+
+		<p>
+			<input type="checkbox" id="ictb_attachment_enable_ocr" name="attachment_enable_ocr" value="1" <?php if ($values['attachment_enable_ocr']) { p('checked'); } ?>>
+			<label for="ictb_attachment_enable_ocr"><strong>OCR fuer Bilder aktivieren (tesseract)</strong></label>
+		</p>
+
+		<p>
+			<label for="ictb_attachment_ocr_languages"><strong>OCR Sprachen (tesseract -l)</strong></label><br>
+			<input type="text" id="ictb_attachment_ocr_languages" name="attachment_ocr_languages" style="width: 240px;" value="<?php p($values['attachment_ocr_languages']); ?>" placeholder="deu+eng">
+		</p>
+
+		<p>
 			<button type="button" id="ictb_test_connection">Verbindung testen</button>
 			<span id="ictb_test_result" style="margin-left: 10px;"></span>
 		</p>
@@ -97,7 +147,9 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 	const urlInput = document.getElementById('ictb_ironclaw_url');
 	const fakeUserSelect = document.getElementById('ictb_fake_user_id');
 	const fakeUserNameInput = document.getElementById('ictb_fake_user_name');
-	if (!formEl || !button || !result || !saveResult || !urlInput || !fakeUserSelect || !fakeUserNameInput) {
+	const reactionApprovalHidden = document.getElementById('ictb_reaction_approval_user_ids');
+	const reactionApprovalSelect = document.getElementById('ictb_reaction_approval_user_ids_list');
+	if (!formEl || !button || !result || !saveResult || !urlInput || !fakeUserSelect || !fakeUserNameInput || !reactionApprovalHidden || !reactionApprovalSelect) {
 		return;
 	}
 
@@ -110,10 +162,23 @@ $testUrl = \OC::$server->getURLGenerator()->linkToRoute('ironclaw_talk_bridge.Se
 	fakeUserSelect.addEventListener('change', syncFakeUserName);
 	syncFakeUserName();
 
+	const syncReactionApprovalIds = function () {
+		const selected = Array.from(reactionApprovalSelect.selectedOptions || []).map(function (option) {
+			return String(option.value || '').trim();
+		}).filter(function (value) {
+			return value !== '';
+		});
+		reactionApprovalHidden.value = selected.join(',');
+	};
+
+	reactionApprovalSelect.addEventListener('change', syncReactionApprovalIds);
+	syncReactionApprovalIds();
+
 	const requestToken = <?php echo json_encode((string)$_['requesttoken']); ?>;
 
 	formEl.addEventListener('submit', async function (event) {
 		event.preventDefault();
+		syncReactionApprovalIds();
 		saveResult.textContent = 'Speichere...';
 		saveResult.style.color = '';
 

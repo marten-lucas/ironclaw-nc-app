@@ -4,7 +4,10 @@ This app forwards Nextcloud Talk messages to Ironclaw through a synchronous, ser
 
 ## Scope
 
-- Integration point: `OCA\\Talk\\Events\\ChatMessageSentEvent`
+- Integration points:
+  - `OCA\\Talk\\Events\\ChatMessageSentEvent`
+  - `OCA\\Talk\\Events\\ReactionAddedEvent`
+  - `OCA\\Talk\\Events\\ReactionRemovedEvent`
 - No outbox, no background job, no direct reads on Talk participant tables
 - Routing rule:
   - one-to-one/direct room type: forward without mention
@@ -21,6 +24,13 @@ Values are read from app config (`app=ironclaw_talk_bridge`):
 - `fake_user_id` (required for self-loop prevention)
 - `room_allowlist_tokens` (optional CSV)
 - `signature_tolerance_seconds` (default `300`)
+- `reaction_approval_user_ids` (optional CSV; authorizes HITL reactions `✅` and `❌`)
+- `attachment_allowed_mime_patterns` (CSV allowlist, default: `text/*,application/pdf,image/*,application/json,application/xml,text/markdown,text/csv`)
+- `attachment_max_file_size_bytes` (default `5242880`)
+- `attachment_max_total_size_bytes` (default `20971520`)
+- `attachment_max_extract_chars` (default `12000`)
+- `attachment_enable_ocr` (`0|1`, default `0`)
+- `attachment_ocr_languages` (tesseract languages, default `deu+eng`)
 
 ## Event Contract to Ironclaw
 
@@ -46,7 +56,9 @@ Body shape:
   },
   "object": {
     "id": "456",
-    "content": "@Ironclaw summarize this"
+    "content": "@Ironclaw summarize this",
+    "attachments": [],
+    "attachmentErrors": []
   },
   "target": {
     "id": "room-token"
@@ -54,6 +66,9 @@ Body shape:
   "eventId": "nc-talk:room-token:456"
 }
 ```
+
+When attachments are present, the bridge resolves them server-side and enriches `object.attachments[*].extract` with extracted text metadata where possible.
+If extraction fails or policy blocks an attachment (MIME/size), the bridge emits structured entries in `object.attachmentErrors`.
 
 ## Logging and Counters
 

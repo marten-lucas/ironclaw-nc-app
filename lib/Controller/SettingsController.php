@@ -40,6 +40,13 @@ class SettingsController extends Controller {
 		string $ironclaw_shared_secret = '',
 		string $room_allowlist_tokens = '',
 		string $signature_tolerance_seconds = '300',
+		string $reaction_approval_user_ids = '',
+		string $attachment_allowed_mime_patterns = 'text/*,application/pdf,image/*,application/json,application/xml,text/markdown,text/csv',
+		string $attachment_max_file_size_bytes = '5242880',
+		string $attachment_max_total_size_bytes = '20971520',
+		string $attachment_max_extract_chars = '12000',
+		string $attachment_ocr_languages = 'deu+eng',
+		?string $attachment_enable_ocr = null,
 		?string $enabled_present = null,
 		?string $enabled = null,
 	): Response {
@@ -70,8 +77,34 @@ class SettingsController extends Controller {
 		$this->config->setAppValue(Application::APP_ID, 'fake_user_id', $uid);
 		$this->config->setAppValue(Application::APP_ID, 'room_allowlist_tokens', trim($room_allowlist_tokens));
 
+		$approvalIds = $this->normalizeReactionApprovalIds(
+			$reaction_approval_user_ids,
+			$this->request->getParam('reaction_approval_user_ids_list', [])
+		);
+		$this->config->setAppValue(Application::APP_ID, 'reaction_approval_user_ids', implode(',', $approvalIds));
+
 		$tolerance = max(60, min(3600, (int)$signature_tolerance_seconds));
 		$this->config->setAppValue(Application::APP_ID, 'signature_tolerance_seconds', (string)$tolerance);
+
+		$maxFileBytes = max(64 * 1024, min(100 * 1024 * 1024, (int)$attachment_max_file_size_bytes));
+		$maxTotalBytes = max($maxFileBytes, min(500 * 1024 * 1024, (int)$attachment_max_total_size_bytes));
+		$maxExtractChars = max(1000, min(200000, (int)$attachment_max_extract_chars));
+		$mimePatterns = trim($attachment_allowed_mime_patterns);
+		if ($mimePatterns === '') {
+			$mimePatterns = 'text/*,application/pdf,image/*,application/json,application/xml,text/markdown,text/csv';
+		}
+
+		$ocrLanguages = preg_replace('/[^a-zA-Z+]/', '', trim($attachment_ocr_languages));
+		if ($ocrLanguages === null || $ocrLanguages === '') {
+			$ocrLanguages = 'deu+eng';
+		}
+
+		$this->config->setAppValue(Application::APP_ID, 'attachment_allowed_mime_patterns', $mimePatterns);
+		$this->config->setAppValue(Application::APP_ID, 'attachment_max_file_size_bytes', (string)$maxFileBytes);
+		$this->config->setAppValue(Application::APP_ID, 'attachment_max_total_size_bytes', (string)$maxTotalBytes);
+		$this->config->setAppValue(Application::APP_ID, 'attachment_max_extract_chars', (string)$maxExtractChars);
+		$this->config->setAppValue(Application::APP_ID, 'attachment_ocr_languages', $ocrLanguages);
+		$this->config->setAppValue(Application::APP_ID, 'attachment_enable_ocr', $attachment_enable_ocr !== null ? '1' : '0');
 
 		$normalizedSharedSecret = trim($ironclaw_shared_secret);
 		if ($normalizedSharedSecret !== '') {
@@ -79,6 +112,34 @@ class SettingsController extends Controller {
 		}
 
 		return $this->saveSuccess();
+	}
+
+	/**
+	 * @param mixed $selectedList
+	 * @return string[]
+	 */
+	private function normalizeReactionApprovalIds(string $csvValue, mixed $selectedList): array {
+		$ids = [];
+
+		if (is_array($selectedList)) {
+			foreach ($selectedList as $entry) {
+				$entry = trim((string)$entry);
+				if ($entry !== '') {
+					$ids[] = $entry;
+				}
+			}
+		}
+
+		if ($ids === []) {
+			foreach (explode(',', $csvValue) as $entry) {
+				$entry = trim($entry);
+				if ($entry !== '') {
+					$ids[] = $entry;
+				}
+			}
+		}
+
+		return array_values(array_unique($ids));
 	}
 
 	private function getSettingsUrl(): string {

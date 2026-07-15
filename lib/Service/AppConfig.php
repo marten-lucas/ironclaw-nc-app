@@ -54,6 +54,66 @@ class AppConfig {
 		return max(60, min(3600, $value));
 	}
 
+	/**
+	 * @return string[]
+	 */
+	public function getReactionApprovalUserIds(): array {
+		$raw = trim($this->config->getAppValue(Application::APP_ID, 'reaction_approval_user_ids', ''));
+		if ($raw === '') {
+			return [];
+		}
+
+		$ids = array_map(static fn (string $value): string => trim($value), explode(',', $raw));
+		$ids = array_filter($ids, static fn (string $value): bool => $value !== '');
+		return array_values(array_unique($ids));
+	}
+
+	public function isReactionApprovalActor(string $actorType, string $actorId): bool {
+		if (trim($actorType) !== 'users') {
+			return false;
+		}
+
+		return in_array(trim($actorId), $this->getReactionApprovalUserIds(), true);
+	}
+
+	/**
+	 * @return string[]
+	 */
+	public function getAttachmentAllowedMimePatterns(): array {
+		$raw = trim($this->config->getAppValue(Application::APP_ID, 'attachment_allowed_mime_patterns', 'text/*,application/pdf,image/*,application/json,application/xml,text/markdown,text/csv'));
+		$patterns = array_map(static fn (string $value): string => trim(strtolower($value)), explode(',', $raw));
+		$patterns = array_filter($patterns, static fn (string $value): bool => $value !== '');
+		return array_values(array_unique($patterns));
+	}
+
+	public function getAttachmentMaxFileSizeBytes(): int {
+		$value = (int)$this->config->getAppValue(Application::APP_ID, 'attachment_max_file_size_bytes', (string)(5 * 1024 * 1024));
+		return max(64 * 1024, min(100 * 1024 * 1024, $value));
+	}
+
+	public function getAttachmentMaxTotalSizeBytes(): int {
+		$value = (int)$this->config->getAppValue(Application::APP_ID, 'attachment_max_total_size_bytes', (string)(20 * 1024 * 1024));
+		return max($this->getAttachmentMaxFileSizeBytes(), min(500 * 1024 * 1024, $value));
+	}
+
+	public function getAttachmentMaxExtractChars(): int {
+		$value = (int)$this->config->getAppValue(Application::APP_ID, 'attachment_max_extract_chars', '12000');
+		return max(1000, min(200000, $value));
+	}
+
+	public function isAttachmentOcrEnabled(): bool {
+		return $this->config->getAppValue(Application::APP_ID, 'attachment_enable_ocr', '0') === '1';
+	}
+
+	public function getAttachmentOcrLanguages(): string {
+		$languages = trim($this->config->getAppValue(Application::APP_ID, 'attachment_ocr_languages', 'deu+eng'));
+		if ($languages === '') {
+			return 'deu+eng';
+		}
+
+		return preg_replace('/[^a-zA-Z+]/', '', $languages) ?: 'deu+eng';
+	}
+
 	public function isReadyForDelivery(): bool {
 		return $this->getIronclawInboundUrl() !== ''
 			&& $this->getSharedSecret() !== ''

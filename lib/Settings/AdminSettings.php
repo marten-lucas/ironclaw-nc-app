@@ -22,6 +22,11 @@ class AdminSettings implements ISettings {
 			$secret = $this->config->getAppValue(Application::APP_ID, 'ironclaw_shared_secret', '');
 			$fakeUserId = $this->config->getAppValue(Application::APP_ID, 'fake_user_id', '');
 			$fakeUserName = $this->config->getAppValue(Application::APP_ID, 'mention_display_name', '');
+			$reactionApprovalRaw = $this->config->getAppValue(Application::APP_ID, 'reaction_approval_user_ids', '');
+			$reactionApprovalIds = array_values(array_filter(array_map(
+				static fn (string $id): string => trim($id),
+				explode(',', $reactionApprovalRaw)
+			), static fn (string $id): bool => $id !== ''));
 			$users = [];
 
 			// Keep settings page available even if user directory lookup fails.
@@ -63,6 +68,23 @@ class AdminSettings implements ISettings {
 				}
 			}
 
+			foreach ($reactionApprovalIds as $approvalId) {
+				$hasSelectedUser = false;
+				foreach ($users as $user) {
+					if ((string)$user['uid'] === (string)$approvalId) {
+						$hasSelectedUser = true;
+						break;
+					}
+				}
+
+				if (!$hasSelectedUser) {
+					$users[] = [
+						'uid' => $approvalId,
+						'displayName' => $approvalId,
+					];
+				}
+			}
+
 			usort($users, static function (array $a, array $b): int {
 				return strcmp((string)$a['displayName'], (string)$b['displayName']);
 			});
@@ -75,6 +97,14 @@ class AdminSettings implements ISettings {
 					'fake_user_id' => $fakeUserId,
 					'room_allowlist_tokens' => $this->config->getAppValue(Application::APP_ID, 'room_allowlist_tokens', ''),
 					'signature_tolerance_seconds' => $this->config->getAppValue(Application::APP_ID, 'signature_tolerance_seconds', '300'),
+					'reaction_approval_user_ids' => $reactionApprovalRaw,
+					'reaction_approval_user_id_list' => $reactionApprovalIds,
+					'attachment_allowed_mime_patterns' => $this->config->getAppValue(Application::APP_ID, 'attachment_allowed_mime_patterns', 'text/*,application/pdf,image/*,application/json,application/xml,text/markdown,text/csv'),
+					'attachment_max_file_size_bytes' => $this->config->getAppValue(Application::APP_ID, 'attachment_max_file_size_bytes', (string)(5 * 1024 * 1024)),
+					'attachment_max_total_size_bytes' => $this->config->getAppValue(Application::APP_ID, 'attachment_max_total_size_bytes', (string)(20 * 1024 * 1024)),
+					'attachment_max_extract_chars' => $this->config->getAppValue(Application::APP_ID, 'attachment_max_extract_chars', '12000'),
+					'attachment_enable_ocr' => $this->config->getAppValue(Application::APP_ID, 'attachment_enable_ocr', '0') === '1',
+					'attachment_ocr_languages' => $this->config->getAppValue(Application::APP_ID, 'attachment_ocr_languages', 'deu+eng'),
 				],
 				'users' => $users,
 				'uiStatus' => $uiStatus,
@@ -95,6 +125,14 @@ class AdminSettings implements ISettings {
 					'fake_user_id' => '',
 					'room_allowlist_tokens' => '',
 					'signature_tolerance_seconds' => '300',
+					'reaction_approval_user_ids' => '',
+					'reaction_approval_user_id_list' => [],
+					'attachment_allowed_mime_patterns' => 'text/*,application/pdf,image/*,application/json,application/xml,text/markdown,text/csv',
+					'attachment_max_file_size_bytes' => (string)(5 * 1024 * 1024),
+					'attachment_max_total_size_bytes' => (string)(20 * 1024 * 1024),
+					'attachment_max_extract_chars' => '12000',
+					'attachment_enable_ocr' => false,
+					'attachment_ocr_languages' => 'deu+eng',
 				],
 				'users' => [],
 				'uiStatus' => 'error',
