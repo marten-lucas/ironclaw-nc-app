@@ -112,17 +112,6 @@ class ChatMessageSentListener implements IEventListener {
 		);
 
 		if ($requiresMention && !$hasMention) {
-			$twoParticipantRoom = $this->participantInspector->isTwoParticipantRoomWithFakeUser($roomToken, $fakeUserId);
-			if ($twoParticipantRoom === true) {
-				$requiresMention = false;
-				$matchedBy = 'two_participant_room_with_fake_user';
-				$this->logger->debug('Participant inspector overrode mention requirement for two-participant room', [
-					'app' => 'ironclaw_talk_bridge',
-					'eventId' => $payload['eventId'] ?? null,
-					'roomToken' => $roomToken,
-					'roomType' => $roomType,
-				]);
-			} else {
 			$this->counters->increment(BridgeCounters::KEY_EVENTS_DENIED);
 			$this->counters->increment(BridgeCounters::KEY_MENTION_MISSES);
 			$this->logDecision('deny', 'mention_required_missing', [
@@ -134,7 +123,6 @@ class ChatMessageSentListener implements IEventListener {
 				'messagePreview' => $messagePreview,
 			]);
 			return;
-			}
 		}
 
 		$payload['room']['type'] = $roomType;
@@ -178,36 +166,31 @@ class ChatMessageSentListener implements IEventListener {
 		]);
 
 		$wirePayload = $this->buildIronclawWebhookPayload($payload);
-		$maxAttempts = 2;
+		$statusCode = null;
 		$lastError = '';
-		for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-			try {
-				$statusCode = $this->client->deliver($wirePayload);
-				if ($statusCode >= 200 && $statusCode < 300) {
-					$this->counters->increment(BridgeCounters::KEY_EVENTS_DELIVERED);
-					$this->logger->info('Ironclaw event delivered (sync)', [
-						'app' => 'ironclaw_talk_bridge',
-						'eventId' => $payload['eventId'] ?? null,
-						'status' => $statusCode,
-						'attempt' => $attempt,
-					]);
-					$this->logDecision('allow', 'delivered', [
-						'eventId' => $payload['eventId'] ?? null,
-						'roomToken' => $roomToken,
-						'status' => $statusCode,
-						'attempt' => $attempt,
-					]);
-					return;
-				}
+		try {
+			$statusCode = $this->client->deliver($wirePayload);
+		} catch (\Throwable $e) {
+			$lastError = $this->redactThrowable($e);
+		}
 
-				$lastError = 'Ironclaw returned HTTP ' . $statusCode;
-			} catch (\Throwable $e) {
-				$lastError = $e->getMessage();
-			}
+		if ($statusCode !== null && $statusCode >= 200 && $statusCode < 300) {
+			$this->counters->increment(BridgeCounters::KEY_EVENTS_DELIVERED);
+			$this->logger->info('Ironclaw event delivered (sync)', [
+				'app' => 'ironclaw_talk_bridge',
+				'eventId' => $payload['eventId'] ?? null,
+				'status' => $statusCode,
+			]);
+			$this->logDecision('allow', 'delivered', [
+				'eventId' => $payload['eventId'] ?? null,
+				'roomToken' => $roomToken,
+				'status' => $statusCode,
+			]);
+			return;
+		}
 
-			if ($attempt < $maxAttempts) {
-				usleep(150000);
-			}
+		if ($statusCode !== null) {
+			$lastError = 'upstream_http_' . $statusCode;
 		}
 
 		$this->counters->increment(BridgeCounters::KEY_DELIVERY_FAILURES);
@@ -215,14 +198,22 @@ class ChatMessageSentListener implements IEventListener {
 			'app' => 'ironclaw_talk_bridge',
 			'eventId' => $payload['eventId'] ?? null,
 			'error' => $lastError,
-			'attempts' => $maxAttempts,
+			'attempts' => 1,
 		]);
 		$this->logDecision('deny', 'delivery_failed', [
 			'eventId' => $payload['eventId'] ?? null,
 			'roomToken' => $roomToken,
 			'error' => $lastError,
-			'attempts' => $maxAttempts,
+			'attempts' => 1,
 		]);
+	}
+
+	private function redactThrowable(\Throwable $throwable): string {
+		$class = trim($throwable::class, '\\');
+		$parts = explode('\\', $class);
+		$short = strtolower((string)end($parts));
+		$short = preg_replace('/[^a-z0-9_]/', '', $short) ?: 'error';
+		return 'transport_' . $short;
 	}
 
 	/**

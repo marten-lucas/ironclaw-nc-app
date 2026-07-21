@@ -5,13 +5,13 @@
 1. Implement Nextcloud app bootstrap and Talk listener.
 2. Implement exact mention gating and self-loop prevention.
 3. Implement signed outbound contract to Ironclaw.
-4. Implement synchronous room-type policy (one-to-one bypass, mention-required fallback).
+4. Implement strict mention-only policy for all room types.
 5. Provide operational docs and validation checklist.
 6. Add unit tests for mention matcher and signature logic.
 
 Exit criteria:
 - Mention-only triggering works.
-- One-to-one/direct rooms can forward without mention.
+- One-to-one/direct rooms require mention.
 - No per-room bot activation required for trigger path.
 - Delivery failures are explicit and observable in request-path logs.
 

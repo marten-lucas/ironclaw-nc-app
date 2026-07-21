@@ -19,9 +19,9 @@ Use `OCA\\Talk\\Events\\ChatMessageSentEvent` as the primary inbound integration
 4. Listener applies synchronous gating:
    - ignore fake-user self messages
    - room scope allowlist
-   - room-type policy (one-to-one without mention, others mention-required)
+   - strict mention policy (without mention no forward)
 5. Listener builds signed Nextcloud-compatible webhook payload.
-6. Listener sends directly to Ironclaw with a short opportunistic micro-retry.
+6. Listener sends directly to Ironclaw with a single low-timeout request.
 7. Ironclaw handles idempotency using `eventId`.
 
 ## Contract Surface

@@ -10,8 +10,7 @@ This app forwards Nextcloud Talk messages to Ironclaw through a synchronous, ser
   - `OCA\\Talk\\Events\\ReactionRemovedEvent`
 - No outbox, no background job, no direct reads on Talk participant tables
 - Routing rule:
-  - one-to-one/direct room type: forward without mention
-  - group/public/unknown room type: forward only on exact mention
+  - all room types: forward only on exact mention
 
 ## App Config
 
@@ -79,7 +78,7 @@ If extraction fails or policy blocks an attachment (MIME/size), the bridge emits
 
 ## Validation Checklist
 
-1. DM without mention is forwarded.
-2. Group/public room without mention is denied.
-3. Group/public room with mention is forwarded.
+1. Any room without mention is denied.
+2. Group/public room with mention is forwarded.
+3. DM with mention is forwarded.
 4. Fake-user self messages are denied.

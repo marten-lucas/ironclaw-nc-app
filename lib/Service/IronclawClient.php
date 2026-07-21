@@ -26,8 +26,8 @@ class IronclawClient {
 		$response = $client->post($url, [
 			'headers' => $headers,
 			'body' => $body,
-			'timeout' => 10,
-			'connect_timeout' => 5,
+			'timeout' => 2,
+			'connect_timeout' => 1,
 			'nextcloud' => [
 				'allow_local_address' => true,
 			],

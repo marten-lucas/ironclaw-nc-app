@@ -73,29 +73,26 @@ class ReactionEventListener implements IEventListener {
 		);
 
 		$wirePayload = $this->buildIronclawWebhookPayload($payload);
-		$maxAttempts = 2;
+		$statusCode = null;
 		$lastError = '';
-		for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-			try {
-				$statusCode = $this->client->deliver($wirePayload);
-				if ($statusCode >= 200 && $statusCode < 300) {
-					$this->counters->increment(BridgeCounters::KEY_EVENTS_DELIVERED);
-					$this->logDecision('allow', 'reaction_delivered', [
-						'eventId' => $payload['eventId'] ?? null,
-						'roomToken' => $roomToken,
-						'status' => $statusCode,
-						'attempt' => $attempt,
-					]);
-					return;
-				}
-				$lastError = 'Ironclaw returned HTTP ' . $statusCode;
-			} catch (\Throwable $e) {
-				$lastError = $e->getMessage();
-			}
+		try {
+			$statusCode = $this->client->deliver($wirePayload);
+		} catch (\Throwable $e) {
+			$lastError = $this->redactThrowable($e);
+		}
 
-			if ($attempt < $maxAttempts) {
-				usleep(150000);
-			}
+		if ($statusCode !== null && $statusCode >= 200 && $statusCode < 300) {
+			$this->counters->increment(BridgeCounters::KEY_EVENTS_DELIVERED);
+			$this->logDecision('allow', 'reaction_delivered', [
+				'eventId' => $payload['eventId'] ?? null,
+				'roomToken' => $roomToken,
+				'status' => $statusCode,
+			]);
+			return;
+		}
+
+		if ($statusCode !== null) {
+			$lastError = 'upstream_http_' . $statusCode;
 		}
 
 		$this->counters->increment(BridgeCounters::KEY_DELIVERY_FAILURES);
@@ -103,8 +100,16 @@ class ReactionEventListener implements IEventListener {
 			'eventId' => $payload['eventId'] ?? null,
 			'roomToken' => $roomToken,
 			'error' => $lastError,
-			'attempts' => $maxAttempts,
+			'attempts' => 1,
 		]);
+	}
+
+	private function redactThrowable(\Throwable $throwable): string {
+		$class = trim($throwable::class, '\\');
+		$parts = explode('\\', $class);
+		$short = strtolower((string)end($parts));
+		$short = preg_replace('/[^a-z0-9_]/', '', $short) ?: 'error';
+		return 'transport_' . $short;
 	}
 
 	/**

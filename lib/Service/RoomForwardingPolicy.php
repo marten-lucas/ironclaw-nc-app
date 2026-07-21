@@ -14,17 +14,9 @@ class RoomForwardingPolicy {
 	 * @return array{requiresMention:bool,matchedBy:string}
 	 */
 	public function decide(string $roomType): array {
-		$normalized = strtolower(trim($roomType));
-		$requiresMention = !in_array($normalized, [self::ROOM_TYPE_ONE_TO_ONE], true);
-
-		$matchedBy = 'mention';
-		if (!$requiresMention) {
-			$matchedBy = 'room_type_one_to_one';
-		}
-
 		return [
-			'requiresMention' => $requiresMention,
-			'matchedBy' => $matchedBy,
+			'requiresMention' => true,
+			'matchedBy' => 'mention',
 		];
 	}
 }

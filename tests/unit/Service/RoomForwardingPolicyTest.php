@@ -8,13 +8,13 @@ use OCA\IronclawTalkBridge\Service\RoomForwardingPolicy;
 use PHPUnit\Framework\TestCase;
 
 class RoomForwardingPolicyTest extends TestCase {
-	public function testAllowsWithoutMentionForOneToOneRooms(): void {
+	public function testRequiresMentionForOneToOneRooms(): void {
 		$policy = new RoomForwardingPolicy();
 
 		$result = $policy->decide(RoomForwardingPolicy::ROOM_TYPE_ONE_TO_ONE);
 
-		self::assertFalse($result['requiresMention']);
-		self::assertSame('room_type_one_to_one', $result['matchedBy']);
+		self::assertTrue($result['requiresMention']);
+		self::assertSame('mention', $result['matchedBy']);
 	}
 
 	public function testRequiresMentionForGroupRooms(): void {
